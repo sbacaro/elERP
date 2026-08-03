@@ -11,7 +11,6 @@ const PANEL_AREA = {
   "panel-purchases": "mgmt",
   "panel-catalog": "mgmt",
   "panel-scale": "mgmt",
-  "panel-settings": "mgmt",
 };
 
 const AREA_DEFAULT_PANEL = {
@@ -73,7 +72,6 @@ function applyStaticLabels() {
     "panel-day": t.nav.day,
     "panel-scale": t.nav.scale,
     "panel-catalog": t.nav.catalog,
-    "panel-settings": t.nav.settings,
   };
   ui.navButtons.forEach((btn) => {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
@@ -81,11 +79,6 @@ function applyStaticLabels() {
   ui.areaButtons.forEach((btn) => {
     btn.textContent = btn.dataset.area === "mgmt" ? t.nav.mgmt : t.nav.ops;
   });
-
-  setText("#labelSettings", t.settingsTitle);
-  setText("#settingsHelp", t.settingsHelp);
-  setText("#labelSettingsAccount", t.settingsAccount);
-  setText("#settingsAccountHint", t.settingsAccountHint);
   setText("#labelFlavors", t.flavorsAndItems);
   const search = document.getElementById("productSearch");
   if (search) search.placeholder = t.searchPlaceholder;
@@ -136,7 +129,6 @@ function applyStaticLabels() {
   });
 
   setText("#dayOpenBox h2", t.dayTitle);
-  setText("#btnResetDemo", t.resetDemo);
   setText("#dialogCancel", t.dialogCancel);
   setText("#dialogConfirm", t.dialogConfirm);
   setText("#btnLogout", t.logout);
@@ -1138,15 +1130,6 @@ function bindEvents() {
   });
   document.getElementById("btnNewProduct").addEventListener("click", () => openProductForm());
   document.getElementById("btnNewPurchase").addEventListener("click", openNewPurchase);
-  document.getElementById("btnResetDemo").addEventListener("click", async () => {
-    if (confirm(t.resetConfirm)) {
-      await db.reset();
-      refreshSessionPill();
-      switchPanel("panel-pos");
-      toast(t.syncSaved);
-    }
-  });
-
   document.getElementById("productGrid").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-add]");
     if (btn) addProductToCart(btn.dataset.add);

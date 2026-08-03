@@ -35,13 +35,7 @@ const t = {
     day: "Dia",
     scale: "Balança",
     catalog: "Catálogo",
-    settings: "Ajustes",
   },
-
-  settingsTitle: "Ajustes",
-  settingsHelp: "Configurações da conta e manutenção dos dados na nuvem.",
-  settingsAccount: "Conta",
-  settingsAccountHint: "Dados do PDV ficam na sua conta Supabase.",
 
   sessionOpen: (floatLabel) => `Caixa aberto · fundo ${floatLabel}`,
   sessionClosed: "Caixa fechado",
@@ -211,8 +205,6 @@ const t = {
   dialogConfirm: "Confirmar",
 
   footerStorage: "Dados na sua conta Supabase",
-  resetDemo: "Zerar dados da conta",
-  resetConfirm: "Apagar produtos, vendas, caixa e pedidos desta conta no Supabase?",
 
   saleRegistered: (total) => `Venda ${total} registrada`,
   stockInsufficient: "Estoque insuficiente.",
