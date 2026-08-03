@@ -1,33 +1,55 @@
 # elERP
 
-PDV leve para comércio de sorvete por quilo — MVP estático no GitHub Pages.
+PDV para comércio de sorvete por quilo — GitHub Pages + Supabase (login e dados na nuvem).
 
-**Idioma da interface: português do Brasil (pt-BR).** Datas e valores monetários usam o padrão brasileiro (R$, vírgula decimal).
+**Idioma:** português do Brasil (pt-BR).
+
+## Site
+
+https://sbacaro.github.io/elERP/
+
+## Setup do Supabase (obrigatório uma vez)
+
+Projeto: `https://jdkggegrreixywoyhkmb.supabase.co`
+
+### 1. Criar a tabela
+
+1. Abra o [SQL Editor](https://supabase.com/dashboard/project/jdkggegrreixywoyhkmb/sql/new)
+2. Cole o conteúdo de `supabase/schema.sql`
+3. Clique em **Run**
+
+### 2. URLs de autenticação
+
+Em **Authentication → URL Configuration**:
+
+- **Site URL:** `https://sbacaro.github.io/elERP/`
+- **Redirect URLs:** `https://sbacaro.github.io/elERP/**`
+
+### 3. (Recomendado para começar) confirmar e-mail
+
+Em **Authentication → Providers → Email**, desative **Confirm email** se quiser entrar logo após “Criar conta”.
+
+### 4. Usar o app
+
+1. Abra o site
+2. **Criar conta** (e-mail + senha)
+3. **Entrar** e usar o PDV
 
 ## O que já funciona
 
-- **Caixa**: abrir / fechar turno com conferência de dinheiro
-- **Venda**: sabores por **kg** (peso decimal) + itens por unidade
-- **Estoque**: baixa na venda, alerta de mínimo
-- **Compras**: pedido + recebimento (entra estoque)
-- **Relatório do dia**: totais por forma de pagamento e kg por sabor
+- Login / criar conta / sair
+- Caixa (abrir / fechar)
+- Venda por **kg** + itens por unidade
+- Estoque, compras, relatório do dia
+- Sync dos dados por usuário no Supabase (`app_state`)
 
-Os textos da interface ficam centralizados em `assets/js/i18n.js`. Os dados ficam no armazenamento local deste navegador (protótipo). Depois definimos o backend (Supabase, VPS, Cloudflare, etc.).
-
-## Publicar (GitHub Pages)
-
-1. Repositório → **Settings** → **Pages**
-2. Source: **Deploy from a branch**
-3. Branch: `main` / pasta `/` (root)
-4. Site: `https://sbacaro.github.io/elERP/`
-
-## Uso local
-
-Abra `index.html` no navegador, ou:
+## Desenvolvimento local
 
 ```bash
 npx serve .
 ```
+
+Configuração em `assets/js/config.js` (URL + chave publishable).
 
 ## Licença
 

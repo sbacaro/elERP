@@ -55,36 +55,130 @@ function createSeedState() {
   };
 }
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const seeded = createSeedState();
-      saveState(seeded);
-      return seeded;
-    }
-    return JSON.parse(raw);
-  } catch {
-    const seeded = createSeedState();
-    saveState(seeded);
-    return seeded;
-  }
-}
-
-function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function cloneState(state) {
+  return JSON.parse(JSON.stringify(state));
 }
 
 const db = {
-  state: loadState(),
+  state: createSeedState(),
+  userId: null,
+  ready: false,
+  _saveTimer: null,
+  onSync: null,
 
-  persist() {
-    saveState(this.state);
+  localKey() {
+    return this.userId ? `${STORAGE_KEY}.${this.userId}` : STORAGE_KEY;
   },
 
-  reset() {
+  async bootstrap(userId) {
+    this.userId = userId;
+    this.ready = false;
+
+    let loaded = null;
+    try {
+      loaded = await this.loadFromCloud();
+    } catch (error) {
+      const local = this.readLocal();
+      if (local) {
+        this.state = local;
+        this.ready = true;
+        throw error;
+      }
+      throw error;
+    }
+
+    if (loaded && typeof loaded === "object") {
+      this.state = {
+        products: loaded.products || [],
+        sessions: loaded.sessions || [],
+        sales: loaded.sales || [],
+        stockMovements: loaded.stockMovements || [],
+        suppliers: loaded.suppliers || [],
+        purchaseOrders: loaded.purchaseOrders || [],
+        cart: loaded.cart || [],
+      };
+    } else {
+      const local = this.readLocal();
+      this.state = local || createSeedState();
+      await this.saveToCloud();
+    }
+
+    this.writeLocal();
+    this.ready = true;
+  },
+
+  readLocal() {
+    try {
+      const raw = localStorage.getItem(this.localKey());
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  writeLocal() {
+    localStorage.setItem(this.localKey(), JSON.stringify(this.state));
+  },
+
+  async loadFromCloud() {
+    const sb = window.elERPSb;
+    if (!sb || !this.userId) return null;
+    const { data, error } = await sb
+      .from("app_state")
+      .select("data")
+      .eq("user_id", this.userId)
+      .maybeSingle();
+
+    if (error) {
+      const msg = `${error.message || ""} ${error.code || ""} ${error.details || ""}`;
+      if (/relation .* does not exist|Could not find the table|schema cache/i.test(msg)) {
+        const e = new Error("SCHEMA_MISSING");
+        e.cause = error;
+        throw e;
+      }
+      throw error;
+    }
+    return data?.data ?? null;
+  },
+
+  async saveToCloud() {
+    const sb = window.elERPSb;
+    if (!sb || !this.userId) return { ok: false };
+    if (typeof this.onSync === "function") this.onSync("saving");
+    const { error } = await sb.from("app_state").upsert(
+      {
+        user_id: this.userId,
+        data: cloneState(this.state),
+      },
+      { onConflict: "user_id" }
+    );
+    if (error) {
+      if (typeof this.onSync === "function") this.onSync("error", error);
+      return { ok: false, error };
+    }
+    if (typeof this.onSync === "function") this.onSync("saved");
+    return { ok: true };
+  },
+
+  persist() {
+    if (!this.userId) return;
+    this.writeLocal();
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => {
+      this.saveToCloud();
+    }, 450);
+  },
+
+  async reset() {
     this.state = createSeedState();
-    this.persist();
+    this.writeLocal();
+    await this.saveToCloud();
+  },
+
+  clearSession() {
+    this.userId = null;
+    this.ready = false;
+    this.state = createSeedState();
   },
 
   getOpenSession() {

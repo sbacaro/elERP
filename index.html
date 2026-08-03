@@ -14,18 +14,48 @@
     <link rel="stylesheet" href="./assets/css/app.css" />
   </head>
   <body>
-    <div class="app">
+    <section class="login-screen" id="loginScreen">
+      <div class="login-card card">
+        <div class="brand" style="margin-bottom: 1rem">
+          <h1>elERP</h1>
+          <p id="loginSubtitle">Use seu e-mail e senha para acessar o PDV na nuvem.</p>
+        </div>
+        <h2 id="loginTitle" style="margin-top: 0">Entrar no elERP</h2>
+        <form id="loginForm">
+          <div class="field">
+            <label id="labelEmail" for="loginEmail">E-mail</label>
+            <input id="loginEmail" type="email" autocomplete="username" required />
+          </div>
+          <div class="field">
+            <label id="labelPassword" for="loginPassword">Senha</label>
+            <input id="loginPassword" type="password" autocomplete="current-password" required minlength="6" />
+          </div>
+          <p class="login-message" id="loginMessage" role="status"></p>
+          <div class="login-actions">
+            <button type="submit" class="btn" id="btnLogin">Entrar</button>
+            <button type="button" class="btn btn-secondary" id="btnSignup">Criar conta</button>
+          </div>
+          <p class="muted" id="loginHint" style="margin-top: 0.85rem">
+            Primeira vez? Crie uma conta com o mesmo formulário.
+          </p>
+        </form>
+      </div>
+    </section>
+
+    <div class="app" id="appShell" hidden>
       <header class="topbar">
         <div class="brand">
           <h1>elERP</h1>
           <p>PDV para sorvete por quilo · estoque · caixa · compras</p>
         </div>
         <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center">
+          <span class="session-pill" id="userEmailLabel" title="Conta logada"></span>
           <div class="session-pill" id="sessionPill" data-open="false">
             <span class="dot"></span> Caixa fechado
           </div>
           <button type="button" class="btn btn-secondary btn-sm" id="btnOpenCash">Abrir caixa</button>
           <button type="button" class="btn btn-danger btn-sm" id="btnCloseCash">Fechar caixa</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnLogout">Sair</button>
         </div>
       </header>
 
@@ -151,7 +181,7 @@
       </main>
 
       <p class="footer-note">
-        <span id="footerStorageText">Dados neste navegador (armazenamento local) · </span>
+        <span id="footerStorageText">Dados na sua conta Supabase · </span>
         <button type="button" class="btn btn-ghost btn-sm" id="btnResetDemo">Restaurar demonstração</button>
       </p>
     </div>
@@ -169,6 +199,9 @@
 
     <div class="toast" id="toast" role="status"></div>
 
+    <script src="./assets/js/config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./assets/js/supabase-client.js"></script>
     <script src="./assets/js/i18n.js"></script>
     <script src="./assets/js/db.js"></script>
     <script src="./assets/js/app.js"></script>

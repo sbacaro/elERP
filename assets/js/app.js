@@ -96,6 +96,14 @@ function applyStaticLabels() {
   setText("#btnResetDemo", t.resetDemo);
   setText("#dialogCancel", t.dialogCancel);
   setText("#dialogConfirm", t.dialogConfirm);
+  setText("#btnLogout", t.logout);
+  setText("#loginTitle", t.loginTitle);
+  setText("#loginSubtitle", t.loginSubtitle);
+  setText("#labelEmail", t.email);
+  setText("#labelPassword", t.password);
+  setText("#btnLogin", t.login);
+  setText("#btnSignup", t.signup);
+  setText("#loginHint", t.orCreateAccount);
 
   const footerText = document.getElementById("footerStorageText");
   if (footerText) footerText.textContent = `${t.footerStorage} · `;
@@ -682,10 +690,12 @@ function bindEvents() {
   });
   document.getElementById("btnNewProduct").addEventListener("click", () => openProductForm());
   document.getElementById("btnNewPurchase").addEventListener("click", openNewPurchase);
-  document.getElementById("btnResetDemo").addEventListener("click", () => {
+  document.getElementById("btnResetDemo").addEventListener("click", async () => {
     if (confirm(t.resetConfirm)) {
-      db.reset();
-      location.reload();
+      await db.reset();
+      refreshSessionPill();
+      switchPanel("panel-pos");
+      toast(t.syncSaved);
     }
   });
 
@@ -745,8 +755,142 @@ function init() {
   document.documentElement.lang = "pt-BR";
   applyStaticLabels();
   bindEvents();
-  refreshSessionPill();
-  switchPanel("panel-pos");
+  bindAuth();
+  bootAuth();
+}
+
+function setAppVisible(loggedIn) {
+  document.getElementById("loginScreen").hidden = loggedIn;
+  document.getElementById("appShell").hidden = !loggedIn;
+}
+
+function setLoginMessage(msg, isError = false) {
+  const el = document.getElementById("loginMessage");
+  el.textContent = msg || "";
+  el.classList.toggle("error", Boolean(isError && msg));
+}
+
+async function bootAuth() {
+  const sb = window.elERPSb;
+  if (!sb) {
+    setLoginMessage("Supabase não carregou. Verifique a conexão.", true);
+    setAppVisible(false);
+    return;
+  }
+
+  db.onSync = (status) => {
+    if (status === "error") toast(t.syncError, true);
+  };
+
+  const {
+    data: { session },
+  } = await sb.auth.getSession();
+  if (session?.user) {
+    await enterApp(session.user);
+  } else {
+    setAppVisible(false);
+  }
+
+  sb.auth.onAuthStateChange(async (event, nextSession) => {
+    if (event === "SIGNED_OUT") {
+      db.clearSession();
+      setAppVisible(false);
+      return;
+    }
+    if (event === "SIGNED_IN" && nextSession?.user) {
+      if (!db.ready || db.userId !== nextSession.user.id) {
+        await enterApp(nextSession.user);
+      }
+    }
+  });
+}
+
+async function enterApp(user) {
+  try {
+    setLoginMessage(t.loginLoading);
+    await db.bootstrap(user.id);
+    document.getElementById("userEmailLabel").textContent = user.email || "";
+    setAppVisible(true);
+    setLoginMessage("");
+    refreshSessionPill();
+    switchPanel("panel-pos");
+  } catch (error) {
+    setAppVisible(false);
+    if (error?.message === "SCHEMA_MISSING") {
+      setLoginMessage(t.schemaMissing, true);
+    } else {
+      setLoginMessage(t.loadError + (error?.message ? ` (${error.message})` : ""), true);
+    }
+  }
+}
+
+function bindAuth() {
+  const form = document.getElementById("loginForm");
+  document.getElementById("btnLogin").addEventListener("click", async (e) => {
+    e.preventDefault();
+    await handleLogin();
+  });
+  document.getElementById("btnSignup").addEventListener("click", async (e) => {
+    e.preventDefault();
+    await handleSignup();
+  });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await handleLogin();
+  });
+  document.getElementById("btnLogout").addEventListener("click", async () => {
+    await window.elERPSb.auth.signOut();
+    db.clearSession();
+    setAppVisible(false);
+  });
+}
+
+async function handleLogin() {
+  const sb = window.elERPSb;
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  if (!email || !password) {
+    setLoginMessage("Informe e-mail e senha.", true);
+    return;
+  }
+  setLoginMessage(t.loginLoading);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    setLoginMessage(error.message, true);
+    return;
+  }
+  await enterApp(data.user);
+}
+
+async function handleSignup() {
+  const sb = window.elERPSb;
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  if (!email || !password) {
+    setLoginMessage("Informe e-mail e senha.", true);
+    return;
+  }
+  if (password.length < 6) {
+    setLoginMessage("A senha precisa ter pelo menos 6 caracteres.", true);
+    return;
+  }
+  setLoginMessage(t.signupLoading);
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: window.location.origin + window.location.pathname,
+    },
+  });
+  if (error) {
+    setLoginMessage(error.message, true);
+    return;
+  }
+  if (data.session?.user) {
+    await enterApp(data.session.user);
+    return;
+  }
+  setLoginMessage(t.signupOk);
 }
 
 init();

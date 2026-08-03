@@ -6,6 +6,25 @@ const t = {
 
   brandSubtitle: "PDV para sorvete por quilo · estoque · caixa · compras",
 
+  loginTitle: "Entrar no elERP",
+  loginSubtitle: "Use seu e-mail e senha para acessar o PDV na nuvem.",
+  email: "E-mail",
+  password: "Senha",
+  login: "Entrar",
+  signup: "Criar conta",
+  logout: "Sair",
+  orCreateAccount: "Primeira vez? Crie uma conta com o mesmo formulário.",
+  loginLoading: "Entrando...",
+  signupLoading: "Criando conta...",
+  signupOk: "Conta criada. Se pedir confirmação, verifique o e-mail e depois entre.",
+  loginRequired: "Faça login para usar o sistema.",
+  syncSaving: "Salvando na nuvem...",
+  syncSaved: "Salvo na nuvem",
+  syncError: "Não foi possível salvar na nuvem.",
+  loadError: "Não foi possível carregar seus dados.",
+  schemaMissing:
+    "Tabela ainda não criada no Supabase. Rode o arquivo supabase/schema.sql no SQL Editor.",
+
   nav: {
     pos: "Caixa",
     products: "Produtos",
@@ -132,9 +151,9 @@ const t = {
   dialogCancel: "Cancelar",
   dialogConfirm: "Confirmar",
 
-  footerStorage: "Dados neste navegador (armazenamento local)",
+  footerStorage: "Dados na sua conta Supabase",
   resetDemo: "Restaurar demonstração",
-  resetConfirm: "Zerar dados e recarregar a demonstração?",
+  resetConfirm: "Zerar dados desta conta e recarregar a demonstração?",
 
   saleRegistered: (total) => `Venda ${total} registrada`,
   stockInsufficient: "Estoque insuficiente.",
