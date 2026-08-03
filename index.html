@@ -104,7 +104,7 @@
                     <th>Preço</th>
                     <th>Custo</th>
                     <th>Estoque</th>
-                    <th>Status</th>
+                    <th>Situação</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -121,7 +121,7 @@
               <button type="button" class="btn" id="btnNewPurchase">Novo pedido</button>
             </div>
             <p class="muted" style="margin-top: 0">
-              Fluxo: criar → marcar enviado → receber (entra no estoque).
+              Fluxo: criar → marcar como enviado → receber (entra no estoque).
             </p>
             <div class="table-wrap">
               <table>
@@ -129,7 +129,7 @@
                   <tr>
                     <th>Criado</th>
                     <th>Fornecedor</th>
-                    <th>Status</th>
+                    <th>Situação</th>
                     <th>Itens</th>
                     <th>Total custo</th>
                     <th></th>
@@ -151,14 +151,14 @@
       </main>
 
       <p class="footer-note">
-        Dados neste navegador (localStorage) ·
-        <button type="button" class="btn btn-ghost btn-sm" id="btnResetDemo">Resetar demo</button>
+        Dados neste navegador (armazenamento local) ·
+        <button type="button" class="btn btn-ghost btn-sm" id="btnResetDemo">Restaurar demonstração</button>
       </p>
     </div>
 
-    <div class="dialog-backdrop" id="dialogBackdrop" role="dialog" aria-modal="true">
+    <div class="dialog-backdrop" id="dialogBackdrop" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
       <div class="dialog">
-        <h3 id="dialogTitle">Dialog</h3>
+        <h3 id="dialogTitle">Confirmação</h3>
         <div id="dialogBody"></div>
         <div class="dialog-actions">
           <button type="button" class="btn btn-secondary" id="dialogCancel">Cancelar</button>
@@ -169,6 +169,7 @@
 
     <div class="toast" id="toast" role="status"></div>
 
+    <script src="./assets/js/i18n.js"></script>
     <script src="./assets/js/db.js"></script>
     <script src="./assets/js/app.js"></script>
   </body>

@@ -1,4 +1,5 @@
 const { db, roundMoney, roundQty, formatMoney, formatQty, formatDateTime } = window.elERP;
+const { t, payMethodLabel, poStatusLabel } = window.elERPLocale;
 
 const ui = {
   toastEl: document.getElementById("toast"),
@@ -19,6 +20,77 @@ function money(n) {
   return formatMoney(n);
 }
 
+function applyStaticLabels() {
+  document.querySelector('.brand p').textContent = t.brandSubtitle;
+  document.getElementById("btnOpenCash").textContent = t.openCash;
+  document.getElementById("btnCloseCash").textContent = t.closeCash;
+  document.getElementById("btnOpenCashFromPos").textContent = t.openCashNow;
+  document.querySelector("#posGate h2").textContent = t.cashClosedTitle;
+  document.querySelector("#posGate .muted").textContent = t.cashClosedHelp;
+
+  const navMap = {
+    "panel-pos": t.nav.pos,
+    "panel-products": t.nav.products,
+    "panel-purchases": t.nav.purchases,
+    "panel-day": t.nav.day,
+  };
+  ui.navButtons.forEach((btn) => {
+    btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
+  });
+
+  document.querySelector("#posWorkspace .card-head h2").textContent = t.flavorsAndItems;
+  document.getElementById("productSearch").placeholder = t.searchPlaceholder;
+  document.querySelector("#posWorkspace .card:last-child .card-head h2").textContent = t.cart;
+  document.getElementById("btnClearCart").textContent = t.clear;
+  document.querySelector(".cart-total span").textContent = t.total;
+  document.querySelector('label[for="payMethod"]').textContent = t.payment;
+  document.querySelector('label[for="payAmount"]').textContent = t.amountPaid;
+  document.getElementById("btnCheckout").textContent = t.finishSale;
+
+  const paySelect = document.getElementById("payMethod");
+  [...paySelect.options].forEach((opt) => {
+    opt.textContent = payMethodLabel(opt.value);
+  });
+
+  document.querySelector("#panel-products .card-head h2").textContent = t.productsTitle;
+  document.getElementById("btnNewProduct").textContent = t.newProduct;
+  const productHeaders = document.querySelectorAll("#panel-products thead th");
+  const productHeaderLabels = [
+    t.colName,
+    t.colUnit,
+    t.colPrice,
+    t.colCost,
+    t.colStock,
+    t.colStatus,
+    "",
+  ];
+  productHeaders.forEach((th, i) => {
+    th.textContent = productHeaderLabels[i] ?? "";
+  });
+
+  document.querySelector("#panel-purchases .card-head h2").textContent = t.purchasesTitle;
+  document.getElementById("btnNewPurchase").textContent = t.newPurchase;
+  document.querySelector("#panel-purchases .muted").textContent = t.purchasesHelp;
+  const purchaseHeaders = document.querySelectorAll("#panel-purchases thead th");
+  const purchaseHeaderLabels = [
+    t.colCreated,
+    t.colSupplier,
+    t.colStatus,
+    t.colItems,
+    t.colCostTotal,
+    "",
+  ];
+  purchaseHeaders.forEach((th, i) => {
+    th.textContent = purchaseHeaderLabels[i] ?? "";
+  });
+
+  document.querySelector("#dayOpenBox h2").textContent = t.dayTitle;
+  document.getElementById("btnResetDemo").textContent = t.resetDemo;
+  document.getElementById("dialogCancel").textContent = t.dialogCancel;
+  document.getElementById("dialogConfirm").textContent = t.dialogConfirm;
+  document.querySelector(".footer-note").childNodes[0].textContent = `${t.footerStorage} · `;
+}
+
 function switchPanel(id) {
   ui.panels.forEach((p) => p.classList.toggle("active", p.id === id));
   ui.navButtons.forEach((b) => {
@@ -34,13 +106,11 @@ function refreshSessionPill() {
   const open = db.getOpenSession();
   ui.sessionPill.dataset.open = open ? "true" : "false";
   ui.sessionPill.innerHTML = open
-    ? `<span class="dot"></span> Caixa aberto · fundo ${money(open.openingFloat)}`
-    : `<span class="dot"></span> Caixa fechado`;
+    ? `<span class="dot"></span> ${t.sessionOpen(money(open.openingFloat))}`
+    : `<span class="dot"></span> ${t.sessionClosed}`;
 }
 
-/* ---------- Dialogs ---------- */
-
-function openDialog(title, bodyHtml, onConfirm, confirmLabel = "Confirmar") {
+function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm) {
   const backdrop = document.getElementById("dialogBackdrop");
   const titleEl = document.getElementById("dialogTitle");
   const bodyEl = document.getElementById("dialogBody");
@@ -69,8 +139,6 @@ function openDialog(title, bodyHtml, onConfirm, confirmLabel = "Confirmar") {
   };
 }
 
-/* ---------- POS ---------- */
-
 function renderPos() {
   const open = db.getOpenSession();
   const gate = document.getElementById("posGate");
@@ -95,7 +163,7 @@ function renderPos() {
         <button type="button" class="product-tile" data-add="${p.id}">
           <strong>${escapeHtml(p.name)}</strong>
           <span>${money(p.price)} / ${p.unit}</span>
-          <span class="stock ${low ? "low" : ""}">${formatQty(p.stock, p.unit)}${low ? " · baixo" : ""}</span>
+          <span class="stock ${low ? "low" : ""}">${formatQty(p.stock, p.unit)}${low ? ` · ${t.stockLowShort}` : ""}</span>
         </button>`;
     })
     .join("");
@@ -107,7 +175,7 @@ function renderCart() {
   const list = document.getElementById("cartList");
   const cart = db.state.cart;
   if (!cart.length) {
-    list.innerHTML = `<li class="empty">Toque em um sabor ou item para começar.</li>`;
+    list.innerHTML = `<li class="empty">${t.cartEmpty}</li>`;
   } else {
     list.innerHTML = cart
       .map((item, idx) => {
@@ -120,7 +188,7 @@ function renderCart() {
             </div>
             <div style="text-align:right">
               <strong>${money(line)}</strong>
-              <div><button type="button" class="btn btn-ghost btn-sm" data-remove-cart="${idx}">remover</button></div>
+              <div><button type="button" class="btn btn-ghost btn-sm" data-remove-cart="${idx}">${t.remove}</button></div>
             </div>
           </li>`;
       })
@@ -145,7 +213,7 @@ function addProductToCart(productId) {
     const existing = cart.find((c) => c.productId === product.id && c.unit === "un");
     const nextQty = (existing?.qty || 0) + 1;
     if (nextQty > product.stock) {
-      toast("Estoque insuficiente.", true);
+      toast(t.stockInsufficient, true);
       return;
     }
     if (existing) existing.qty = nextQty;
@@ -164,18 +232,18 @@ function addProductToCart(productId) {
   }
 
   openDialog(
-    `Peso · ${product.name}`,
+    t.weightTitle(product.name),
     `
-      <p class="muted">Preço: ${money(product.price)} / kg · Estoque: ${formatQty(product.stock, "kg")}</p>
+      <p class="muted">${t.priceStock(money(product.price), formatQty(product.stock, "kg"))}</p>
       <div class="field">
-        <label for="dlgWeight">Peso (kg)</label>
-        <input id="dlgWeight" type="number" min="0.001" step="0.001" placeholder="ex: 0.385" autofocus />
+        <label for="dlgWeight">${t.weightKg}</label>
+        <input id="dlgWeight" type="number" min="0.001" step="0.001" placeholder="${t.weightPlaceholder}" autofocus />
       </div>
     `,
     (body) => {
       const qty = roundQty(body.querySelector("#dlgWeight").value, "kg");
-      if (!(qty > 0)) throw new Error("Informe um peso válido.");
-      if (qty > product.stock) throw new Error("Estoque insuficiente.");
+      if (!(qty > 0)) throw new Error(t.errors.invalidWeight);
+      if (qty > product.stock) throw new Error(t.stockInsufficient);
       const cart = db.state.cart.slice();
       cart.push({
         productId: product.id,
@@ -188,7 +256,7 @@ function addProductToCart(productId) {
       renderCart();
       toast(`${product.name}: ${formatQty(qty, "kg")}`);
     },
-    "Adicionar"
+    t.add
   );
 
   requestAnimationFrame(() => {
@@ -198,24 +266,22 @@ function addProductToCart(productId) {
 
 function checkout() {
   try {
-    if (!db.getOpenSession()) throw new Error("Abra o caixa antes de vender.");
-    if (!db.state.cart.length) throw new Error("Carrinho vazio.");
+    if (!db.getOpenSession()) throw new Error(t.errors.openBeforeSell);
+    if (!db.state.cart.length) throw new Error(t.errors.emptyCart);
     const method = document.getElementById("payMethod").value;
     const amount = roundMoney(document.getElementById("payAmount").value);
     const total = roundMoney(db.state.cart.reduce((s, i) => s + i.qty * i.unitPrice, 0));
     if (Math.abs(amount - total) > 0.009) {
-      throw new Error("Ajuste o valor pago para fechar exatamente o total.");
+      throw new Error(t.errors.payMustMatchTotal);
     }
     const sale = db.confirmSale({ payments: [{ method, amount }] });
-    toast(`Venda ${money(sale.total)} registrada`);
+    toast(t.saleRegistered(money(sale.total)));
     renderPos();
     refreshSessionPill();
   } catch (err) {
     toast(err.message || String(err), true);
   }
 }
-
-/* ---------- Products ---------- */
 
 function renderProducts() {
   const tbody = document.getElementById("productsBody");
@@ -229,9 +295,9 @@ function renderProducts() {
           <td>${p.unit}</td>
           <td>${money(p.price)}</td>
           <td>${money(p.cost)}</td>
-          <td>${formatQty(p.stock, p.unit)} ${low ? '<span class="badge warn">mín.</span>' : ""}</td>
-          <td>${p.active ? '<span class="badge ok">ativo</span>' : '<span class="badge">inativo</span>'}</td>
-          <td><button type="button" class="btn btn-secondary btn-sm" data-edit-product="${p.id}">editar</button></td>
+          <td>${formatQty(p.stock, p.unit)} ${low ? `<span class="badge warn">${t.lowStock}</span>` : ""}</td>
+          <td>${p.active ? `<span class="badge ok">${t.active}</span>` : `<span class="badge">${t.inactive}</span>`}</td>
+          <td><button type="button" class="btn btn-secondary btn-sm" data-edit-product="${p.id}">${t.edit}</button></td>
         </tr>`;
     })
     .join("");
@@ -239,45 +305,45 @@ function renderProducts() {
 
 function openProductForm(product = null) {
   openDialog(
-    product ? "Editar produto" : "Novo produto",
+    product ? t.editProduct : t.newProduct,
     `
       <div class="field">
-        <label>Nome</label>
+        <label>${t.colName}</label>
         <input id="pName" value="${escapeAttr(product?.name || "")}" />
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Unidade</label>
+          <label>${t.unit}</label>
           <select id="pUnit">
             <option value="kg" ${!product || product.unit === "kg" ? "selected" : ""}>kg</option>
             <option value="un" ${product?.unit === "un" ? "selected" : ""}>un</option>
           </select>
         </div>
         <div class="field">
-          <label>Preço</label>
+          <label>${t.colPrice}</label>
           <input id="pPrice" type="number" min="0" step="0.01" value="${product?.price ?? ""}" />
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Custo</label>
+          <label>${t.colCost}</label>
           <input id="pCost" type="number" min="0" step="0.01" value="${product?.cost ?? 0}" />
         </div>
         <div class="field">
-          <label>Estoque</label>
+          <label>${t.colStock}</label>
           <input id="pStock" type="number" min="0" step="0.001" value="${product?.stock ?? 0}" />
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Estoque mínimo</label>
+          <label>${t.minStock}</label>
           <input id="pMin" type="number" min="0" step="0.001" value="${product?.minStock ?? 0}" />
         </div>
         <div class="field">
-          <label>Status</label>
+          <label>${t.status}</label>
           <select id="pActive">
-            <option value="1" ${product?.active !== false ? "selected" : ""}>Ativo</option>
-            <option value="0" ${product?.active === false ? "selected" : ""}>Inativo</option>
+            <option value="1" ${product?.active !== false ? "selected" : ""}>${t.active}</option>
+            <option value="0" ${product?.active === false ? "selected" : ""}>${t.inactive}</option>
           </select>
         </div>
       </div>
@@ -293,21 +359,19 @@ function openProductForm(product = null) {
         minStock: body.querySelector("#pMin").value,
         active: body.querySelector("#pActive").value === "1",
       });
-      toast("Produto salvo");
+      toast(t.productSaved);
       renderProducts();
       renderPos();
     },
-    "Salvar"
+    t.save
   );
 }
-
-/* ---------- Purchases ---------- */
 
 function renderPurchases() {
   const tbody = document.getElementById("purchasesBody");
   const orders = db.state.purchaseOrders;
   if (!orders.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">Nenhum pedido ainda.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">${t.noOrders}</td></tr>`;
     return;
   }
   tbody.innerHTML = orders
@@ -325,12 +389,12 @@ function renderPurchases() {
         <tr>
           <td>${formatDateTime(o.createdAt)}</td>
           <td>${escapeHtml(o.supplierName)}</td>
-          <td><span class="badge ${statusBadge}">${o.status}</span></td>
-          <td>${o.items.length} item(ns)</td>
+          <td><span class="badge ${statusBadge}">${poStatusLabel(o.status)}</span></td>
+          <td>${t.itemsCount(o.items.length)}</td>
           <td>${money(total)}</td>
           <td>
-            ${o.status === "draft" ? `<button class="btn btn-secondary btn-sm" data-po-send="${o.id}">enviar</button>` : ""}
-            ${o.status === "sent" || o.status === "partial" ? `<button class="btn btn-sm" data-po-receive="${o.id}">receber</button>` : ""}
+            ${o.status === "draft" ? `<button class="btn btn-secondary btn-sm" data-po-send="${o.id}">${t.send}</button>` : ""}
+            ${o.status === "sent" || o.status === "partial" ? `<button class="btn btn-sm" data-po-receive="${o.id}">${t.receive}</button>` : ""}
           </td>
         </tr>`;
     })
@@ -348,31 +412,31 @@ function openNewPurchase() {
     .join("");
 
   openDialog(
-    "Novo pedido de compra",
+    t.newPurchase,
     `
       <div class="field">
-        <label>Fornecedor</label>
+        <label>${t.supplier}</label>
         <select id="poSupplier">${supplierOptions}</select>
       </div>
       <div class="field">
-        <label>Produto</label>
+        <label>${t.product}</label>
         <select id="poProduct">${options}</select>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Quantidade</label>
+          <label>${t.qty}</label>
           <input id="poQty" type="number" min="0.001" step="0.001" value="5" />
         </div>
         <div class="field">
-          <label>Custo unitário</label>
+          <label>${t.unitCost}</label>
           <input id="poCost" type="number" min="0" step="0.01" />
         </div>
       </div>
       <div class="field">
-        <label>Observação</label>
-        <input id="poNote" placeholder="opcional" />
+        <label>${t.note}</label>
+        <input id="poNote" placeholder="${t.optional}" />
       </div>
-      <p class="muted">MVP: um item por pedido. Depois expandimos para vários itens.</p>
+      <p class="muted">${t.purchaseHint}</p>
     `,
     (body) => {
       const productId = body.querySelector("#poProduct").value;
@@ -389,10 +453,10 @@ function openNewPurchase() {
           },
         ],
       });
-      toast("Pedido criado");
+      toast(t.orderCreated);
       renderPurchases();
     },
-    "Criar pedido"
+    t.newPurchase
   );
 
   const productSelect = document.getElementById("poProduct");
@@ -413,14 +477,14 @@ function receivePurchase(orderId) {
       const remaining = roundQty(i.qtyOrdered - i.qtyReceived, i.unit);
       return `
         <div class="field">
-          <label>${escapeHtml(i.name)} (falta ${formatQty(remaining, i.unit)})</label>
+          <label>${escapeHtml(i.name)} (${t.remaining(formatQty(remaining, i.unit))})</label>
           <input data-rec="${i.productId}" type="number" min="0" step="0.001" value="${remaining}" />
         </div>`;
     })
     .join("");
 
   openDialog(
-    "Receber pedido",
+    t.receiveOrder,
     fields,
     (body) => {
       const receipts = [...body.querySelectorAll("[data-rec]")].map((el) => ({
@@ -428,16 +492,14 @@ function receivePurchase(orderId) {
         qty: el.value,
       }));
       db.receivePurchaseOrder(orderId, receipts);
-      toast("Recebimento registrado");
+      toast(t.receiptDone);
       renderPurchases();
       renderProducts();
       renderPos();
     },
-    "Confirmar recebimento"
+    t.confirmReceive
   );
 }
-
-/* ---------- Day / cash ---------- */
 
 function renderDay() {
   const open = db.getOpenSession();
@@ -450,11 +512,11 @@ function renderDay() {
     closedHint.hidden = false;
     const last = db.state.sessions.find((s) => s.status === "closed");
     closedHint.textContent = last
-      ? `Último fechamento: esperado ${money(last.expectedCash)}, contado ${money(last.countedCash)}, diferença ${money(last.difference)}.`
-      : "Nenhum caixa aberto. Abra um turno para começar a vender.";
+      ? t.lastClose(money(last.expectedCash), money(last.countedCash), money(last.difference))
+      : t.noSessionYet;
     reportEl.innerHTML = last
       ? renderReportHtml(db.reportForSession(last.id), last)
-      : `<p class="empty">Sem dados de turno ainda.</p>`;
+      : `<p class="empty">${t.noSessionData}</p>`;
     return;
   }
 
@@ -477,43 +539,43 @@ function renderReportHtml(report, session) {
       <tr>
         <td>${formatDateTime(s.soldAt)}</td>
         <td>${money(s.total)}</td>
-        <td>${s.payments.map((p) => p.method).join(", ")}</td>
-        <td><button class="btn btn-ghost btn-sm" data-cancel-sale="${s.id}" ${session.status !== "open" ? "disabled" : ""}>cancelar</button></td>
+        <td>${s.payments.map((p) => payMethodLabel(p.method)).join(", ")}</td>
+        <td><button class="btn btn-ghost btn-sm" data-cancel-sale="${s.id}" ${session.status !== "open" ? "disabled" : ""}>${t.cancel}</button></td>
       </tr>`
     )
     .join("");
 
   return `
     <div class="stats">
-      <div class="stat"><label>Vendas</label><strong>${report.salesCount}</strong></div>
-      <div class="stat"><label>Total</label><strong>${money(report.total)}</strong></div>
-      <div class="stat"><label>Kg de sorvete</label><strong>${formatQty(report.kgSold, "kg")}</strong></div>
-      <div class="stat"><label>Fundo de caixa</label><strong>${money(session.openingFloat)}</strong></div>
+      <div class="stat"><label>${t.sales}</label><strong>${report.salesCount}</strong></div>
+      <div class="stat"><label>${t.total}</label><strong>${money(report.total)}</strong></div>
+      <div class="stat"><label>${t.kgSold}</label><strong>${formatQty(report.kgSold, "kg")}</strong></div>
+      <div class="stat"><label>${t.cashFloat}</label><strong>${money(session.openingFloat)}</strong></div>
     </div>
     <div class="card" style="margin-bottom:1rem">
-      <h3>Por pagamento</h3>
+      <h3>${t.byPayment}</h3>
       <div class="stats">
-        <div class="stat"><label>Dinheiro</label><strong>${money(report.byMethod.dinheiro || 0)}</strong></div>
-        <div class="stat"><label>Pix</label><strong>${money(report.byMethod.pix || 0)}</strong></div>
-        <div class="stat"><label>Cartão</label><strong>${money(report.byMethod.cartao || 0)}</strong></div>
+        <div class="stat"><label>${payMethodLabel("dinheiro")}</label><strong>${money(report.byMethod.dinheiro || 0)}</strong></div>
+        <div class="stat"><label>${payMethodLabel("pix")}</label><strong>${money(report.byMethod.pix || 0)}</strong></div>
+        <div class="stat"><label>${payMethodLabel("cartao")}</label><strong>${money(report.byMethod.cartao || 0)}</strong></div>
       </div>
     </div>
     <div class="grid-2">
       <div class="card">
-        <h3>Por produto</h3>
+        <h3>${t.byProduct}</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Item</th><th>Qtd</th><th>Total</th></tr></thead>
-            <tbody>${productRows || `<tr><td colspan="3" class="empty">Sem vendas</td></tr>`}</tbody>
+            <thead><tr><th>${t.item}</th><th>${t.qtyShort}</th><th>${t.total}</th></tr></thead>
+            <tbody>${productRows || `<tr><td colspan="3" class="empty">${t.noSales}</td></tr>`}</tbody>
           </table>
         </div>
       </div>
       <div class="card">
-        <h3>Vendas do turno</h3>
+        <h3>${t.sessionSales}</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Quando</th><th>Total</th><th>Pagamento</th><th></th></tr></thead>
-            <tbody>${saleRows || `<tr><td colspan="4" class="empty">Sem vendas</td></tr>`}</tbody>
+            <thead><tr><th>${t.when}</th><th>${t.total}</th><th>${t.payment}</th><th></th></tr></thead>
+            <tbody>${saleRows || `<tr><td colspan="4" class="empty">${t.noSales}</td></tr>`}</tbody>
           </table>
         </div>
       </div>
@@ -523,48 +585,48 @@ function renderReportHtml(report, session) {
 
 function openCashSession() {
   openDialog(
-    "Abrir caixa",
+    t.openCashTitle,
     `
       <div class="field">
-        <label>Fundo de troco (R$)</label>
+        <label>${t.openingFloat}</label>
         <input id="openFloat" type="number" min="0" step="0.01" value="100" />
       </div>
       <div class="field">
-        <label>Observação</label>
-        <input id="openNote" placeholder="opcional" />
+        <label>${t.note}</label>
+        <input id="openNote" placeholder="${t.optional}" />
       </div>
     `,
     (body) => {
       db.openSession(body.querySelector("#openFloat").value, body.querySelector("#openNote").value);
-      toast("Caixa aberto");
+      toast(t.cashOpened);
       refreshSessionPill();
       renderPos();
       renderDay();
       switchPanel("panel-pos");
     },
-    "Abrir"
+    t.open
   );
 }
 
 function closeCashSession() {
   const open = db.getOpenSession();
   if (!open) {
-    toast("Nenhum caixa aberto.", true);
+    toast(t.noOpenCash, true);
     return;
   }
   const report = db.reportForSession(open.id);
   const expected = roundMoney(open.openingFloat + (report.byMethod.dinheiro || 0));
   openDialog(
-    "Fechar o dia / caixa",
+    t.closeCashTitle,
     `
-      <p class="muted">Esperado em dinheiro: <strong>${money(expected)}</strong> (fundo + vendas em dinheiro).</p>
+      <p class="muted">${t.expectedCash(`<strong>${money(expected)}</strong>`)}</p>
       <div class="field">
-        <label>Valor contado em dinheiro</label>
+        <label>${t.countedCash}</label>
         <input id="closeCounted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" />
       </div>
       <div class="field">
-        <label>Observação</label>
-        <input id="closeNote" placeholder="opcional" />
+        <label>${t.note}</label>
+        <input id="closeNote" placeholder="${t.optional}" />
       </div>
     `,
     (body) => {
@@ -572,17 +634,15 @@ function closeCashSession() {
         body.querySelector("#closeCounted").value,
         body.querySelector("#closeNote").value
       );
-      toast(`Caixa fechado · diferença ${money(session.difference)}`);
+      toast(t.cashClosedToast(money(session.difference)));
       refreshSessionPill();
       renderPos();
       renderDay();
       switchPanel("panel-day");
     },
-    "Fechar caixa"
+    t.closeConfirm
   );
 }
-
-/* ---------- helpers / events ---------- */
 
 function escapeHtml(str) {
   return String(str)
@@ -613,7 +673,7 @@ function bindEvents() {
   document.getElementById("btnNewProduct").addEventListener("click", () => openProductForm());
   document.getElementById("btnNewPurchase").addEventListener("click", openNewPurchase);
   document.getElementById("btnResetDemo").addEventListener("click", () => {
-    if (confirm("Zerar dados e recarregar demonstração?")) {
+    if (confirm(t.resetConfirm)) {
       db.reset();
       location.reload();
     }
@@ -646,7 +706,7 @@ function bindEvents() {
     if (send) {
       try {
         db.markPurchaseSent(send.dataset.poSend);
-        toast("Pedido marcado como enviado");
+        toast(t.orderMarkedSent);
         renderPurchases();
       } catch (err) {
         toast(err.message, true);
@@ -658,10 +718,10 @@ function bindEvents() {
   document.getElementById("dayReport").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-cancel-sale]");
     if (!btn) return;
-    if (!confirm("Cancelar esta venda e devolver estoque?")) return;
+    if (!confirm(t.cancelSaleConfirm)) return;
     try {
       db.cancelSale(btn.dataset.cancelSale);
-      toast("Venda cancelada");
+      toast(t.saleCancelled);
       renderDay();
       renderPos();
       renderProducts();
@@ -672,6 +732,8 @@ function bindEvents() {
 }
 
 function init() {
+  document.documentElement.lang = "pt-BR";
+  applyStaticLabels();
   bindEvents();
   refreshSessionPill();
   switchPanel("panel-pos");

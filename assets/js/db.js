@@ -10,6 +10,13 @@ const SEED_PRODUCTS = [
   { name: "Colher", unit: "un", price: 0.5, cost: 0.1, stock: 200, minStock: 50 },
 ];
 
+const err = (key, ...args) => {
+  const catalog = window.elERPLocale?.t?.errors || {};
+  const value = catalog[key];
+  if (typeof value === "function") return value(...args);
+  return value || key;
+};
+
 function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`;
 }
@@ -85,7 +92,7 @@ const db = {
   },
 
   openSession(openingFloat, note = "") {
-    if (this.getOpenSession()) throw new Error("Já existe um caixa aberto.");
+    if (this.getOpenSession()) throw new Error(err("alreadyOpen"));
     const session = {
       id: uid("sess"),
       status: "open",
@@ -104,7 +111,7 @@ const db = {
 
   closeSession(countedCash, note = "") {
     const session = this.getOpenSession();
-    if (!session) throw new Error("Nenhum caixa aberto.");
+    if (!session) throw new Error(err("noOpenSession"));
     const sales = this.state.sales.filter(
       (s) => s.sessionId === session.id && s.status === "confirmed"
     );
@@ -146,12 +153,12 @@ const db = {
       minStock: Number(input.minStock || 0),
       active: input.active !== false,
     };
-    if (!payload.name) throw new Error("Nome do produto é obrigatório.");
-    if (payload.price < 0) throw new Error("Preço inválido.");
+    if (!payload.name) throw new Error(err("invalidProductName"));
+    if (payload.price < 0) throw new Error(err("invalidPrice"));
 
     if (input.id) {
       const idx = this.state.products.findIndex((p) => p.id === input.id);
-      if (idx < 0) throw new Error("Produto não encontrado.");
+      if (idx < 0) throw new Error(err("productNotFound"));
       const prev = this.state.products[idx];
       const stockDelta = roundQty(payload.stock - prev.stock, payload.unit);
       const { stock: _ignoredStock, ...rest } = payload;
@@ -178,10 +185,10 @@ const db = {
 
   _moveStock(productId, qtyDelta, type, refId, note, opts = {}) {
     const product = this.state.products.find((p) => p.id === productId);
-    if (!product) throw new Error("Produto não encontrado no estoque.");
+    if (!product) throw new Error(err("productNotInStock"));
     if (!opts.skipMutate) {
       const next = roundQty(product.stock + qtyDelta, product.unit);
-      if (next < -0.0001) throw new Error(`Estoque insuficiente: ${product.name}`);
+      if (next < -0.0001) throw new Error(err("stockInsufficientNamed", product.name));
       product.stock = Math.max(0, next);
     }
     this.state.stockMovements.unshift({
@@ -208,15 +215,15 @@ const db = {
 
   confirmSale({ payments, note = "" }) {
     const session = this.getOpenSession();
-    if (!session) throw new Error("Abra o caixa antes de vender.");
+    if (!session) throw new Error(err("openBeforeSell"));
     const cart = this.state.cart;
-    if (!cart.length) throw new Error("Carrinho vazio.");
+    if (!cart.length) throw new Error(err("emptyCart"));
 
     for (const item of cart) {
       const product = this.state.products.find((p) => p.id === item.productId);
-      if (!product || !product.active) throw new Error("Produto inválido no carrinho.");
+      if (!product || !product.active) throw new Error(err("invalidCartProduct"));
       if (product.stock + 1e-9 < item.qty) {
-        throw new Error(`Estoque insuficiente: ${product.name}`);
+        throw new Error(err("stockInsufficientNamed", product.name));
       }
     }
 
@@ -237,7 +244,7 @@ const db = {
     const total = roundMoney(items.reduce((s, i) => s + i.lineTotal, 0));
     const payTotal = roundMoney(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
     if (Math.abs(payTotal - total) > 0.009) {
-      throw new Error("Pagamento diferente do total da venda.");
+      throw new Error(err("paymentMismatch"));
     }
 
     const sale = {
@@ -269,11 +276,11 @@ const db = {
 
   cancelSale(saleId) {
     const sale = this.state.sales.find((s) => s.id === saleId);
-    if (!sale) throw new Error("Venda não encontrada.");
+    if (!sale) throw new Error(err("saleNotFound"));
     if (sale.status === "cancelled") return sale;
     const session = this.state.sessions.find((s) => s.id === sale.sessionId);
     if (!session || session.status !== "open") {
-      throw new Error("Só é possível cancelar venda do caixa aberto.");
+      throw new Error(err("cancelOnlyOpen"));
     }
     sale.status = "cancelled";
     for (const item of sale.items) {
@@ -286,9 +293,9 @@ const db = {
   },
 
   createPurchaseOrder({ supplierId, items, note = "" }) {
-    if (!items?.length) throw new Error("Informe itens no pedido.");
+    if (!items?.length) throw new Error(err("orderNeedsItems"));
     const supplier = this.state.suppliers.find((s) => s.id === supplierId);
-    if (!supplier) throw new Error("Fornecedor inválido.");
+    if (!supplier) throw new Error(err("invalidSupplier"));
     const order = {
       id: uid("po"),
       supplierId,
@@ -299,7 +306,7 @@ const db = {
       receivedAt: null,
       items: items.map((i) => {
         const product = this.state.products.find((p) => p.id === i.productId);
-        if (!product) throw new Error("Produto inválido no pedido.");
+        if (!product) throw new Error(err("invalidOrderProduct"));
         return {
           productId: product.id,
           name: product.name,
@@ -317,8 +324,8 @@ const db = {
 
   markPurchaseSent(orderId) {
     const order = this.state.purchaseOrders.find((o) => o.id === orderId);
-    if (!order) throw new Error("Pedido não encontrado.");
-    if (order.status !== "draft") throw new Error("Pedido já foi enviado/recebido.");
+    if (!order) throw new Error(err("orderNotFound"));
+    if (order.status !== "draft") throw new Error(err("orderAlreadyProcessed"));
     order.status = "sent";
     this.persist();
     return order;
@@ -326,9 +333,9 @@ const db = {
 
   receivePurchaseOrder(orderId, receipts) {
     const order = this.state.purchaseOrders.find((o) => o.id === orderId);
-    if (!order) throw new Error("Pedido não encontrado.");
+    if (!order) throw new Error(err("orderNotFound"));
     if (order.status === "received" || order.status === "cancelled") {
-      throw new Error("Pedido não pode ser recebido.");
+      throw new Error(err("orderCannotReceive"));
     }
 
     let any = false;
@@ -349,7 +356,7 @@ const db = {
       });
     }
 
-    if (!any) throw new Error("Nenhuma quantidade recebida.");
+    if (!any) throw new Error(err("nothingReceived"));
 
     const complete = order.items.every((i) => i.qtyReceived + 1e-9 >= i.qtyOrdered);
     order.status = complete ? "received" : "partial";
@@ -408,21 +415,26 @@ const db = {
 window.elERP = { db, uid, roundMoney, roundQty, formatMoney, formatQty, formatDateTime };
 
 function formatMoney(value) {
-  return Number(value || 0).toLocaleString("pt-BR", {
+  const locale = window.elERPLocale?.LOCALE || "pt-BR";
+  return Number(value || 0).toLocaleString(locale, {
     style: "currency",
     currency: "BRL",
   });
 }
 
 function formatQty(value, unit) {
+  const locale = window.elERPLocale?.LOCALE || "pt-BR";
   const n = Number(value || 0);
-  if (unit === "kg") return `${n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 })} kg`;
-  return `${n.toLocaleString("pt-BR")} un`;
+  if (unit === "kg") {
+    return `${n.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: 3 })} kg`;
+  }
+  return `${n.toLocaleString(locale)} un`;
 }
 
 function formatDateTime(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("pt-BR", {
+  const locale = window.elERPLocale?.LOCALE || "pt-BR";
+  return new Date(iso).toLocaleString(locale, {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
