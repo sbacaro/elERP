@@ -317,6 +317,10 @@ do $$
 declare
   cname text;
 begin
+  if to_regclass('public.store_products') is null then
+    raise notice 'store_products ausente — pulando alteração de unidade';
+    return;
+  end if;
   select c.conname into cname
   from pg_constraint c
   where c.conrelid = 'public.store_products'::regclass
