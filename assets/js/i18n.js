@@ -27,13 +27,21 @@ const t = {
     "Schema ainda não criado no Supabase. Rode supabase/full_schema.sql (e catalog_bebidas_br.sql) no SQL Editor.",
 
   nav: {
+    ops: "Operação",
+    mgmt: "Gestão",
     pos: "Caixa",
     products: "Produtos",
     purchases: "Compras",
     day: "Dia",
     scale: "Balança",
     catalog: "Catálogo",
+    settings: "Ajustes",
   },
+
+  settingsTitle: "Ajustes",
+  settingsHelp: "Configurações da conta e manutenção dos dados na nuvem.",
+  settingsAccount: "Conta",
+  settingsAccountHint: "Dados do PDV ficam na sua conta Supabase.",
 
   sessionOpen: (floatLabel) => `Caixa aberto · fundo ${floatLabel}`,
   sessionClosed: "Caixa fechado",

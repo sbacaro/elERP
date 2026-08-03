@@ -4,11 +4,28 @@ const { t, payMethodLabel, poStatusLabel } = window.elERPLocale;
 const scale = window.elERPScale;
 const catalog = window.elERPCatalog;
 
+const PANEL_AREA = {
+  "panel-pos": "ops",
+  "panel-day": "ops",
+  "panel-products": "mgmt",
+  "panel-purchases": "mgmt",
+  "panel-catalog": "mgmt",
+  "panel-scale": "mgmt",
+  "panel-settings": "mgmt",
+};
+
+const AREA_DEFAULT_PANEL = {
+  ops: "panel-pos",
+  mgmt: "panel-products",
+};
+
 const ui = {
   toastEl: document.getElementById("toast"),
   sessionPill: document.getElementById("sessionPill"),
   panels: [...document.querySelectorAll(".panel")],
-  navButtons: [...document.querySelectorAll(".nav button")],
+  navButtons: [...document.querySelectorAll(".nav-group button[data-panel]")],
+  areaButtons: [...document.querySelectorAll(".area-switch button[data-area]")],
+  currentArea: "ops",
 };
 
 function toast(message, isError = false) {
@@ -56,11 +73,19 @@ function applyStaticLabels() {
     "panel-day": t.nav.day,
     "panel-scale": t.nav.scale,
     "panel-catalog": t.nav.catalog,
+    "panel-settings": t.nav.settings,
   };
   ui.navButtons.forEach((btn) => {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
   });
+  ui.areaButtons.forEach((btn) => {
+    btn.textContent = btn.dataset.area === "mgmt" ? t.nav.mgmt : t.nav.ops;
+  });
 
+  setText("#labelSettings", t.settingsTitle);
+  setText("#settingsHelp", t.settingsHelp);
+  setText("#labelSettingsAccount", t.settingsAccount);
+  setText("#settingsAccountHint", t.settingsAccountHint);
   setText("#labelFlavors", t.flavorsAndItems);
   const search = document.getElementById("productSearch");
   if (search) search.placeholder = t.searchPlaceholder;
@@ -138,14 +163,46 @@ function applyStaticLabels() {
   if (posBarcode) posBarcode.placeholder = t.posBarcodeHint;
 
   const footerText = document.getElementById("footerStorageText");
-  if (footerText) footerText.textContent = `${t.footerStorage} · `;
-
+  if (footerText) footerText.textContent = t.footerStorage;
   fillScaleSelects();
   renderScaleStatus();
   fillCatalogGroups();
 }
 
+function setArea(area, { keepPanel = false } = {}) {
+  const next = area === "mgmt" ? "mgmt" : "ops";
+  ui.currentArea = next;
+  document.body.dataset.area = next;
+
+  ui.areaButtons.forEach((btn) => {
+    btn.setAttribute("aria-current", btn.dataset.area === next ? "page" : "false");
+  });
+
+  const navOps = document.getElementById("navOps");
+  const navMgmt = document.getElementById("navMgmt");
+  setHidden(navOps, next !== "ops");
+  setHidden(navMgmt, next !== "mgmt");
+
+  const activeId = document.querySelector(".panel.active")?.id;
+  if (keepPanel && activeId && PANEL_AREA[activeId] === next) {
+    switchPanel(activeId);
+    return;
+  }
+  switchPanel(AREA_DEFAULT_PANEL[next]);
+}
+
 function switchPanel(id) {
+  const area = PANEL_AREA[id] || "ops";
+  if (ui.currentArea !== area) {
+    ui.currentArea = area;
+    document.body.dataset.area = area;
+    ui.areaButtons.forEach((btn) => {
+      btn.setAttribute("aria-current", btn.dataset.area === area ? "page" : "false");
+    });
+    setHidden(document.getElementById("navOps"), area !== "ops");
+    setHidden(document.getElementById("navMgmt"), area !== "mgmt");
+  }
+
   ui.panels.forEach((p) => p.classList.toggle("active", p.id === id));
   ui.navButtons.forEach((b) => {
     b.setAttribute("aria-current", b.dataset.panel === id ? "page" : "false");
@@ -1039,6 +1096,9 @@ function escapeAttr(str) {
 }
 
 function bindEvents() {
+  ui.areaButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setArea(btn.dataset.area));
+  });
   ui.navButtons.forEach((btn) => {
     btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
   });

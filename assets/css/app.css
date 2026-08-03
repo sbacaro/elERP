@@ -149,6 +149,60 @@ strong,
   max-width: 100%;
 }
 
+.nav-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.area-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.25rem;
+  border-radius: 14px;
+  background: rgba(20, 33, 43, 0.06);
+  border: 1px solid var(--line);
+}
+
+.area-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.6rem 1.1rem;
+  border-radius: 11px;
+  font-weight: 700;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.area-switch button[aria-current="page"] {
+  background: var(--teal-deep);
+  color: #fff;
+}
+
+.nav-shell .nav {
+  margin-bottom: 0;
+}
+
+.nav-group.is-hidden,
+.nav-group[hidden] {
+  display: none !important;
+}
+
+.topbar-cash {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+body[data-area="mgmt"] .ops-only {
+  display: none !important;
+}
+
 .nav button {
   border: 0;
   background: transparent;

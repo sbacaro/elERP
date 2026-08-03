@@ -53,20 +53,33 @@
           <div class="session-pill" id="sessionPill" data-open="false">
             <span class="dot"></span> Caixa fechado
           </div>
-          <button type="button" class="btn btn-secondary btn-sm" id="btnOpenCash">Abrir caixa</button>
-          <button type="button" class="btn btn-danger btn-sm" id="btnCloseCash">Fechar caixa</button>
+          <span class="ops-only topbar-cash">
+            <button type="button" class="btn btn-secondary btn-sm" id="btnOpenCash">Abrir caixa</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnCloseCash">Fechar caixa</button>
+          </span>
           <button type="button" class="btn btn-ghost btn-sm" id="btnLogout">Sair</button>
         </div>
       </header>
 
-      <nav class="nav" aria-label="Seções">
-        <button type="button" data-panel="panel-pos" aria-current="page">Caixa</button>
-        <button type="button" data-panel="panel-products">Produtos</button>
-        <button type="button" data-panel="panel-purchases">Compras</button>
-        <button type="button" data-panel="panel-day">Dia</button>
-        <button type="button" data-panel="panel-scale">Balança</button>
-        <button type="button" data-panel="panel-catalog">Catálogo</button>
-      </nav>
+      <div class="nav-shell">
+        <nav class="area-switch" aria-label="Áreas do app">
+          <button type="button" data-area="ops" aria-current="page" id="areaOpsBtn">Operação</button>
+          <button type="button" data-area="mgmt" id="areaMgmtBtn">Gestão</button>
+        </nav>
+
+        <nav class="nav nav-group" id="navOps" data-area="ops" aria-label="Operação">
+          <button type="button" data-panel="panel-pos" aria-current="page">Caixa</button>
+          <button type="button" data-panel="panel-day">Dia</button>
+        </nav>
+
+        <nav class="nav nav-group is-hidden" id="navMgmt" data-area="mgmt" aria-label="Gestão" hidden>
+          <button type="button" data-panel="panel-products">Produtos</button>
+          <button type="button" data-panel="panel-purchases">Compras</button>
+          <button type="button" data-panel="panel-catalog">Catálogo</button>
+          <button type="button" data-panel="panel-scale">Balança</button>
+          <button type="button" data-panel="panel-settings">Ajustes</button>
+        </nav>
+      </div>
 
       <main>
         <section class="panel active" id="panel-pos">
@@ -264,11 +277,30 @@
             </div>
           </div>
         </section>
+
+        <section class="panel" id="panel-settings">
+          <div class="card">
+            <div class="card-head">
+              <h2 id="labelSettings">Ajustes</h2>
+            </div>
+            <p class="muted" id="settingsHelp">
+              Configurações da conta e manutenção dos dados na nuvem.
+            </p>
+            <div class="form-stack">
+              <div class="field">
+                <label id="labelSettingsAccount">Conta</label>
+                <p class="field-hint" id="settingsAccountHint">Dados do PDV ficam na sua conta Supabase.</p>
+              </div>
+              <div>
+                <button type="button" class="btn btn-danger" id="btnResetDemo">Zerar dados da conta</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
 
       <p class="footer-note">
-        <span id="footerStorageText">Dados na sua conta Supabase · </span>
-        <button type="button" class="btn btn-ghost btn-sm" id="btnResetDemo">Zerar dados da conta</button>
+        <span id="footerStorageText">Dados na sua conta Supabase</span>
       </p>
     </div>
 
