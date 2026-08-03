@@ -1,6 +1,7 @@
 (function () {
 const { db, roundMoney, roundQty, formatMoney, formatQty, formatDateTime } = window.elERP;
 const { t, payMethodLabel, poStatusLabel } = window.elERPLocale;
+const scale = window.elERPScale;
 
 const ui = {
   toastEl: document.getElementById("toast"),
@@ -52,6 +53,7 @@ function applyStaticLabels() {
     "panel-products": t.nav.products,
     "panel-purchases": t.nav.purchases,
     "panel-day": t.nav.day,
+    "panel-scale": t.nav.scale,
   };
   ui.navButtons.forEach((btn) => {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
@@ -118,9 +120,20 @@ function applyStaticLabels() {
   setText("#btnLogin", t.login);
   setText("#btnSignup", t.signup);
   setText("#loginHint", t.orCreateAccount);
+  setText("#labelScale", t.scaleTitle);
+  setText("#scaleHelp", t.scaleHelp);
+  setText("#labelScaleProtocol", t.scaleProtocol);
+  setText("#labelScaleBaud", t.scaleBaud);
+  setText("#btnScaleConnect", t.scaleConnect);
+  setText("#btnScaleDisconnect", t.scaleDisconnect);
+  setText("#btnScaleSave", t.scaleSave);
+  setText("#labelScaleLast", t.scaleLast);
 
   const footerText = document.getElementById("footerStorageText");
   if (footerText) footerText.textContent = `${t.footerStorage} · `;
+
+  fillScaleSelects();
+  renderScaleStatus();
 }
 
 function switchPanel(id) {
@@ -132,6 +145,7 @@ function switchPanel(id) {
   if (id === "panel-products") renderProducts();
   if (id === "panel-purchases") renderPurchases();
   if (id === "panel-day") renderDay();
+  if (id === "panel-scale") renderScaleStatus();
 }
 
 function refreshSessionPill() {
@@ -236,6 +250,52 @@ function renderCart() {
   }
 }
 
+function fillScaleSelects() {
+  if (!scale) return;
+  const protoSel = document.getElementById("scaleProtocol");
+  const baudSel = document.getElementById("scaleBaud");
+  if (!protoSel || !baudSel) return;
+  const cfg = scale.getConfig();
+  protoSel.innerHTML = scale
+    .protocols()
+    .map((p) => `<option value="${p.id}" ${p.id === cfg.protocolId ? "selected" : ""}>${p.label}</option>`)
+    .join("");
+  baudSel.innerHTML = scale
+    .baudRates()
+    .map((b) => `<option value="${b}" ${Number(cfg.baudRate) === b ? "selected" : ""}>${b}</option>`)
+    .join("");
+}
+
+function renderScaleStatus() {
+  if (!scale) return;
+  const st = scale.status();
+  const support = document.getElementById("scaleSupportNote");
+  const statusText = document.getElementById("scaleStatusText");
+  const lastText = document.getElementById("scaleLastText");
+  const rawText = document.getElementById("scaleRawText");
+  if (support) {
+    support.textContent = st.supported ? "" : t.scaleUnsupported;
+  }
+  if (statusText) {
+    statusText.textContent = st.connected ? t.scaleConnected : t.scaleDisconnected;
+  }
+  if (lastText) {
+    if (!st.last) lastText.textContent = t.scaleNone;
+    else {
+      lastText.textContent = `${formatQty(st.last.kg, "kg")} · ${
+        st.last.stable ? t.scaleStable : t.scaleUnstable
+      }`;
+    }
+  }
+  if (rawText) {
+    rawText.textContent = st.last?.raw ? String(st.last.raw) : "";
+  }
+  const connectBtn = document.getElementById("btnScaleConnect");
+  const disconnectBtn = document.getElementById("btnScaleDisconnect");
+  if (connectBtn) connectBtn.disabled = !st.supported || st.connected;
+  if (disconnectBtn) disconnectBtn.disabled = !st.connected;
+}
+
 function addProductToCart(productId) {
   const product = db.state.products.find((p) => p.id === productId);
   if (!product) return;
@@ -271,6 +331,18 @@ function addProductToCart(productId) {
         <label for="dlgWeight">${t.weightKg}</label>
         <input id="dlgWeight" type="number" min="0.001" step="0.001" placeholder="${t.weightPlaceholder}" autofocus />
       </div>
+      <div class="scale-live card" style="box-shadow:none;margin:0 0 0.75rem;padding:0.75rem">
+        <div class="card-head" style="margin-bottom:0.35rem">
+          <strong>${t.scaleLive}</strong>
+          <span id="dlgScaleBadge" class="badge">${t.scaleDisconnected}</span>
+        </div>
+        <div id="dlgScaleReading" class="muted">${t.scaleNone}</div>
+        <div class="toolbar" style="margin:0.55rem 0 0">
+          <button type="button" class="btn btn-secondary btn-sm" id="dlgScaleUse">${t.useScaleWeight}</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="dlgScaleConnect">${t.scaleConnect}</button>
+        </div>
+        <p class="muted" style="margin:0.45rem 0 0;font-size:0.85rem">${t.scaleHintBarcode}</p>
+      </div>
     `,
     (body) => {
       const qty = roundQty(body.querySelector("#dlgWeight").value, "kg");
@@ -292,8 +364,89 @@ function addProductToCart(productId) {
   );
 
   requestAnimationFrame(() => {
-    document.getElementById("dlgWeight")?.focus();
+    const weightInput = document.getElementById("dlgWeight");
+    weightInput?.focus();
+    wireWeightDialogScale(weightInput);
   });
+}
+
+function wireWeightDialogScale(weightInput) {
+  if (!scale) return;
+  const badge = document.getElementById("dlgScaleBadge");
+  const reading = document.getElementById("dlgScaleReading");
+  const useBtn = document.getElementById("dlgScaleUse");
+  const connectBtn = document.getElementById("dlgScaleConnect");
+  const backdrop = document.getElementById("dialogBackdrop");
+
+  const refresh = () => {
+    const st = scale.status();
+    if (badge) {
+      badge.textContent = st.connected ? t.scaleConnected : t.scaleDisconnected;
+      badge.className = `badge ${st.connected ? "ok" : ""}`;
+    }
+    if (reading) {
+      if (!st.last) reading.textContent = t.scaleNone;
+      else {
+        reading.textContent = `${formatQty(st.last.kg, "kg")} · ${
+          st.last.stable ? t.scaleStable : t.scaleUnstable
+        }`;
+      }
+    }
+    if (useBtn) useBtn.disabled = !st.last?.kg;
+  };
+
+  const onScale = (ev) => {
+    if (ev.type === "weight" || ev.type === "connected" || ev.type === "disconnected") {
+      refresh();
+      if (
+        ev.type === "weight" &&
+        ev.reading?.stable &&
+        scale.getConfig().autoUseStable &&
+        weightInput &&
+        document.activeElement !== weightInput
+      ) {
+        weightInput.value = String(ev.reading.kg);
+      } else if (ev.type === "weight" && ev.reading?.kg && weightInput && !weightInput.value) {
+        weightInput.value = String(ev.reading.kg);
+      }
+    }
+  };
+
+  const unsub = scale.on(onScale);
+  scale.armBarcodeCapture(true);
+  refresh();
+
+  useBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    const kg = scale.status().last?.kg;
+    if (kg && weightInput) {
+      weightInput.value = String(kg);
+      weightInput.focus();
+    }
+  });
+
+  connectBtn?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try {
+      await scale.connect();
+      refresh();
+      toast(t.scaleConnected);
+    } catch (err) {
+      if (err?.message === "UNSUPPORTED") toast(t.scaleUnsupported, true);
+      else toast(t.scalePermissionDenied, true);
+    }
+  });
+
+  const finish = () => {
+    scale.armBarcodeCapture(false);
+    unsub();
+    observer.disconnect();
+  };
+
+  const observer = new MutationObserver(() => {
+    if (!backdrop.classList.contains("open")) finish();
+  });
+  observer.observe(backdrop, { attributes: true, attributeFilter: ["class"] });
 }
 
 function checkout() {
@@ -761,6 +914,44 @@ function bindEvents() {
       renderProducts();
     } catch (err) {
       toast(err.message, true);
+    }
+  });
+
+  document.getElementById("btnScaleConnect")?.addEventListener("click", async () => {
+    try {
+      await scale.connect();
+      renderScaleStatus();
+      toast(t.scaleConnected);
+    } catch (err) {
+      if (err?.message === "UNSUPPORTED") toast(t.scaleUnsupported, true);
+      else toast(t.scalePermissionDenied, true);
+    }
+  });
+
+  document.getElementById("btnScaleDisconnect")?.addEventListener("click", async () => {
+    await scale.disconnect();
+    renderScaleStatus();
+  });
+
+  document.getElementById("btnScaleSave")?.addEventListener("click", () => {
+    scale.setConfig({
+      protocolId: document.getElementById("scaleProtocol").value,
+      baudRate: Number(document.getElementById("scaleBaud").value) || 9600,
+    });
+    if (scale.status().connected) {
+      // re-aplica polling com protocolo novo
+      scale.startPolling();
+    }
+    toast(t.scaleSaved);
+    renderScaleStatus();
+  });
+
+  scale?.on((ev) => {
+    if (["weight", "connected", "disconnected", "config"].includes(ev.type)) {
+      renderScaleStatus();
+    }
+    if (ev.type === "error") {
+      toast(t.scaleError, true);
     }
   });
 }

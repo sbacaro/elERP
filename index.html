@@ -64,6 +64,7 @@
         <button type="button" data-panel="panel-products">Produtos</button>
         <button type="button" data-panel="panel-purchases">Compras</button>
         <button type="button" data-panel="panel-day">Dia</button>
+        <button type="button" data-panel="panel-scale">Balança</button>
       </nav>
 
       <main>
@@ -178,6 +179,45 @@
           </div>
           <div id="dayReport"></div>
         </section>
+
+        <section class="panel" id="panel-scale">
+          <div class="card">
+            <div class="card-head">
+              <h2 id="labelScale">Balança de balcão</h2>
+            </div>
+            <p class="muted" id="scaleHelp"></p>
+            <p id="scaleSupportNote" class="muted"></p>
+
+            <div class="field-row">
+              <div class="field">
+                <label id="labelScaleProtocol" for="scaleProtocol">Protocolo</label>
+                <select id="scaleProtocol"></select>
+              </div>
+              <div class="field">
+                <label id="labelScaleBaud" for="scaleBaud">Velocidade (baud)</label>
+                <select id="scaleBaud"></select>
+              </div>
+            </div>
+
+            <div class="toolbar">
+              <button type="button" class="btn" id="btnScaleConnect">Conectar balança (USB)</button>
+              <button type="button" class="btn btn-secondary" id="btnScaleDisconnect">Desconectar</button>
+              <button type="button" class="btn btn-ghost" id="btnScaleSave">Salvar configuração</button>
+            </div>
+
+            <div class="stats" style="margin-top: 0.75rem">
+              <div class="stat">
+                <label id="labelScaleStatus">Situação</label>
+                <strong id="scaleStatusText">—</strong>
+              </div>
+              <div class="stat">
+                <label id="labelScaleLast">Última leitura</label>
+                <strong id="scaleLastText">—</strong>
+              </div>
+            </div>
+            <p class="muted" id="scaleRawText" style="font-family: ui-monospace, monospace; font-size: 0.85rem"></p>
+          </div>
+        </section>
       </main>
 
       <p class="footer-note">
@@ -204,6 +244,8 @@
     <script src="./assets/js/supabase-client.js"></script>
     <script src="./assets/js/i18n.js"></script>
     <script src="./assets/js/db.js"></script>
+    <script src="./assets/js/scale-protocols.js"></script>
+    <script src="./assets/js/scale.js"></script>
     <script src="./assets/js/app.js"></script>
   </body>
 </html>

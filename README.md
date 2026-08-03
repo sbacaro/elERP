@@ -51,6 +51,18 @@ npx serve .
 
 Configuração em `assets/js/config.js` (URL + chave publishable).
 
+## Balança (USB)
+
+No PC do caixa (Chrome/Edge):
+
+1. Aba **Balança** → escolha protocolo (comece em **Automático**) e baud (muitas usam **9600**)
+2. **Conectar balança (USB)** e autorize a porta
+3. Na venda por kg, o peso aparece ao vivo; use **Usar peso da balança**
+
+Também lê **código de barras de peso** (etiqueta) no diálogo de peso.
+
+**Limite:** não cobre 100% das balanças (USB proprietário/HID puro pode falhar). A maioria com USB–serial funciona.
+
 ## Licença
 
 MIT
