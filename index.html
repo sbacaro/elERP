@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="elERP — PDV para sorveteria por quilo" />
+    <title>elERP · PDV sorvete por kg</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,650&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/css/app.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <h1>elERP</h1>
+          <p>PDV para sorvete por quilo · estoque · caixa · compras</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center">
+          <div class="session-pill" id="sessionPill" data-open="false">
+            <span class="dot"></span> Caixa fechado
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="btnOpenCash">Abrir caixa</button>
+          <button type="button" class="btn btn-danger btn-sm" id="btnCloseCash">Fechar caixa</button>
+        </div>
+      </header>
+
+      <nav class="nav" aria-label="Seções">
+        <button type="button" data-panel="panel-pos" aria-current="page">Caixa</button>
+        <button type="button" data-panel="panel-products">Produtos</button>
+        <button type="button" data-panel="panel-purchases">Compras</button>
+        <button type="button" data-panel="panel-day">Dia</button>
+      </nav>
+
+      <main>
+        <section class="panel active" id="panel-pos">
+          <div class="card" id="posGate">
+            <h2>Caixa fechado</h2>
+            <p class="muted">Abra o turno para registrar vendas por kg e controlar o fundo de troco.</p>
+            <button type="button" class="btn" id="btnOpenCashFromPos">Abrir caixa agora</button>
+          </div>
+
+          <div id="posWorkspace" hidden>
+            <div class="grid-2">
+              <div class="card">
+                <div class="card-head">
+                  <h2>Sabores e itens</h2>
+                </div>
+                <div class="toolbar">
+                  <input
+                    id="productSearch"
+                    type="search"
+                    placeholder="Buscar..."
+                    style="flex: 1; min-width: 160px; border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.8rem; background: #fff"
+                  />
+                </div>
+                <div class="product-grid" id="productGrid"></div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <h2>Carrinho</h2>
+                  <button type="button" class="btn btn-ghost btn-sm" id="btnClearCart">Limpar</button>
+                </div>
+                <ul class="cart-list" id="cartList"></ul>
+                <div class="cart-total">
+                  <span>Total</span>
+                  <strong id="cartTotal">R$&nbsp;0,00</strong>
+                </div>
+                <div class="field">
+                  <label for="payMethod">Pagamento</label>
+                  <select id="payMethod">
+                    <option value="dinheiro">Dinheiro</option>
+                    <option value="pix">Pix</option>
+                    <option value="cartao">Cartão</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="payAmount">Valor pago</label>
+                  <input id="payAmount" type="number" min="0" step="0.01" />
+                </div>
+                <button type="button" class="btn" id="btnCheckout" style="width: 100%">Finalizar venda</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-products">
+          <div class="card">
+            <div class="card-head">
+              <h2>Produtos e estoque</h2>
+              <button type="button" class="btn" id="btnNewProduct">Novo produto</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Un.</th>
+                    <th>Preço</th>
+                    <th>Custo</th>
+                    <th>Estoque</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="productsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-purchases">
+          <div class="card">
+            <div class="card-head">
+              <h2>Pedidos de compra</h2>
+              <button type="button" class="btn" id="btnNewPurchase">Novo pedido</button>
+            </div>
+            <p class="muted" style="margin-top: 0">
+              Fluxo: criar → marcar enviado → receber (entra no estoque).
+            </p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Criado</th>
+                    <th>Fornecedor</th>
+                    <th>Status</th>
+                    <th>Itens</th>
+                    <th>Total custo</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="purchasesBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-day">
+          <div class="card" id="dayOpenBox" style="margin-bottom: 1rem">
+            <h2>Turno</h2>
+            <p class="muted" id="dayClosedHint"></p>
+          </div>
+          <div id="dayReport"></div>
+        </section>
+      </main>
+
+      <p class="footer-note">
+        Dados neste navegador (localStorage) ·
+        <button type="button" class="btn btn-ghost btn-sm" id="btnResetDemo">Resetar demo</button>
+      </p>
+    </div>
+
+    <div class="dialog-backdrop" id="dialogBackdrop" role="dialog" aria-modal="true">
+      <div class="dialog">
+        <h3 id="dialogTitle">Dialog</h3>
+        <div id="dialogBody"></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="dialogCancel">Cancelar</button>
+          <button type="button" class="btn" id="dialogConfirm">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <script src="./assets/js/db.js"></script>
+    <script src="./assets/js/app.js"></script>
+  </body>
+</html>
