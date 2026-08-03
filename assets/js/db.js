@@ -1,3 +1,4 @@
+(function () {
 const STORAGE_KEY = "elERP.v1";
 
 const SEED_PRODUCTS = [
@@ -506,8 +507,6 @@ const db = {
   },
 };
 
-window.elERP = { db, uid, roundMoney, roundQty, formatMoney, formatQty, formatDateTime };
-
 function formatMoney(value) {
   const locale = window.elERPLocale?.LOCALE || "pt-BR";
   return Number(value || 0).toLocaleString(locale, {
@@ -535,3 +534,6 @@ function formatDateTime(iso) {
     minute: "2-digit",
   });
 }
+
+window.elERP = { db, uid, roundMoney, roundQty, formatMoney, formatQty, formatDateTime };
+})();

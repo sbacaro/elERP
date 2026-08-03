@@ -1,3 +1,4 @@
+(function () {
 const { db, roundMoney, roundQty, formatMoney, formatQty, formatDateTime } = window.elERP;
 const { t, payMethodLabel, poStatusLabel } = window.elERPLocale;
 
@@ -914,3 +915,5 @@ async function handleSignup() {
 }
 
 init();
+
+})();

@@ -1,3 +1,4 @@
+(function () {
 /** Textos da interface — idioma padrão: pt-BR */
 const LOCALE = "pt-BR";
 
@@ -193,3 +194,5 @@ function poStatusLabel(status) {
 }
 
 window.elERPLocale = { t, payMethodLabel, poStatusLabel, LOCALE };
+
+})();
