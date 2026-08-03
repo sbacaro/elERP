@@ -5,7 +5,7 @@ const LOCALE = "pt-BR";
 const t = {
   locale: LOCALE,
 
-  brandSubtitle: "PDV para sorvete por quilo · estoque · caixa · compras",
+  brandSubtitle: "PDV para açaí e sorvete por grama · estoque · caixa · compras",
 
   loginTitle: "Entrar no elERP",
   loginSubtitle: "Use seu e-mail e senha para acessar o PDV na nuvem.",
@@ -40,7 +40,7 @@ const t = {
   closeCash: "Fechar caixa",
   openCashNow: "Abrir caixa agora",
   cashClosedTitle: "Caixa fechado",
-  cashClosedHelp: "Abra o turno para registrar vendas por kg e controlar o fundo de troco.",
+  cashClosedHelp: "Abra o turno para registrar vendas em gramas e controlar o fundo de troco.",
 
   flavorsAndItems: "Sabores e itens",
   searchPlaceholder: "Buscar...",
@@ -117,7 +117,8 @@ const t = {
   noSessionYet: "Nenhum caixa aberto. Abra um turno para começar a vender.",
   noSessionData: "Sem dados de turno ainda.",
   sales: "Vendas",
-  kgSold: "Kg de sorvete",
+  kgSold: "Peso vendido",
+  gramsSold: "Gramas vendidas",
   cashFloat: "Fundo de caixa",
   byPayment: "Por pagamento",
   byProduct: "Por produto",
@@ -145,8 +146,9 @@ const t = {
 
   weightTitle: (name) => `Peso · ${name}`,
   priceStock: (price, stock) => `Preço: ${price} / kg · Estoque: ${stock}`,
-  weightKg: "Peso (kg)",
-  weightPlaceholder: "ex.: 0,385",
+  weightG: "Peso (g)",
+  weightKg: "Peso (g)",
+  weightPlaceholder: "ex.: 385",
   add: "Adicionar",
   stockLowShort: "baixo",
   readScale: "Ler balança",
@@ -162,14 +164,14 @@ const t = {
   scaleConnected: "Balança conectada",
   scaleTitle: "Balança de balcão",
   scaleHelp:
-    "A maioria das balanças novas usa USB que aparece como porta serial. Use Chrome/Edge no PC do caixa. Também aceita código de barras de peso (etiqueta).",
+    "A venda é sempre em gramas. O preço do sabor continua cadastrado por kg. A balança USB costuma enviar kg e o PDV converte para g.",
   scaleProtocol: "Protocolo",
   scaleBaud: "Velocidade (baud)",
   scaleSave: "Salvar configuração",
   scaleSaved: "Configuração da balança salva",
   scaleLast: "Última leitura",
   scaleNone: "Nenhuma leitura ainda",
-  scaleHintBarcode: "Se a balança imprime etiqueta com código, leia com o scanner neste diálogo.",
+  scaleHintBarcode: "Se a balança imprime etiqueta com código, leia com o scanner neste diálogo (peso em g).",
   scaleError: "Erro na balança",
   scalePermissionDenied: "Permissão da porta USB negada ou cancelada.",
 
@@ -205,7 +207,7 @@ const t = {
     orderAlreadyProcessed: "Pedido já foi enviado/recebido.",
     orderCannotReceive: "Pedido não pode ser recebido.",
     nothingReceived: "Nenhuma quantidade recebida.",
-    invalidWeight: "Informe um peso válido.",
+    invalidWeight: "Informe o peso em gramas (ex.: 385).",
   },
 };
 

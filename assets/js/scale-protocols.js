@@ -179,7 +179,7 @@
     if (!Number.isFinite(grams) || grams <= 0 || grams > 99999) return null;
     const kg = Math.round((grams / 1000) * 1000) / 1000;
     if (kg <= 0 || kg > 100) return null;
-    return { kg, stable: true, raw: digits, source: "barcode" };
+    return { kg, grams, stable: true, raw: digits, source: "barcode" };
   }
 
   window.elERPScaleProtocols = {

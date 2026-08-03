@@ -2,11 +2,11 @@
 const STORAGE_KEY = "elERP.v1";
 
 const SEED_PRODUCTS = [
-  { name: "Chocolate belga", unit: "kg", price: 89.9, cost: 32, stock: 12, minStock: 3 },
-  { name: "Morango", unit: "kg", price: 84.9, cost: 28, minStock: 3, stock: 10 },
-  { name: "Napolitano", unit: "kg", price: 79.9, cost: 26, stock: 14, minStock: 3 },
-  { name: "Pistache", unit: "kg", price: 109.9, cost: 48, stock: 6, minStock: 2 },
-  { name: "Coco", unit: "kg", price: 82.9, cost: 27, stock: 8, minStock: 2 },
+  { name: "Chocolate belga", unit: "g", price: 89.9, cost: 32, stock: 12000, minStock: 3000 },
+  { name: "Morango", unit: "g", price: 84.9, cost: 28, stock: 10000, minStock: 3000 },
+  { name: "Napolitano", unit: "g", price: 79.9, cost: 26, stock: 14000, minStock: 3000 },
+  { name: "Pistache", unit: "g", price: 109.9, cost: 48, stock: 6000, minStock: 2000 },
+  { name: "Coco", unit: "g", price: 82.9, cost: 27, stock: 8000, minStock: 2000 },
   { name: "Pote 500 ml", unit: "un", price: 2.5, cost: 0.8, stock: 120, minStock: 30 },
   { name: "Colher", unit: "un", price: 0.5, cost: 0.1, stock: 200, minStock: 50 },
 ];
@@ -31,9 +31,53 @@ function roundMoney(n) {
 }
 
 function roundQty(n, unit) {
-  const decimals = unit === "kg" ? 3 : 0;
+  // peso sempre em gramas inteiras; unidades sem decimal
+  const decimals = 0;
   const f = 10 ** decimals;
   return Math.round((Number(n) + Number.EPSILON) * f) / f;
+}
+
+/** Preço cadastrado de produtos "g" é sempre R$/kg. */
+function lineTotal(qty, unit, pricePerUnitOrKg) {
+  const q = Number(qty) || 0;
+  const p = Number(pricePerUnitOrKg) || 0;
+  if (unit === "g") return roundMoney((q / 1000) * p);
+  return roundMoney(q * p);
+}
+
+function normalizeWeightState(state) {
+  if (!state || typeof state !== "object") return state;
+  for (const p of state.products || []) {
+    if (p.unit === "kg") {
+      p.unit = "g";
+      p.stock = roundQty((Number(p.stock) || 0) * 1000, "g");
+      p.minStock = roundQty((Number(p.minStock) || 0) * 1000, "g");
+    }
+  }
+  for (const item of state.cart || []) {
+    if (item.unit === "kg") {
+      item.unit = "g";
+      item.qty = roundQty((Number(item.qty) || 0) * 1000, "g");
+    }
+  }
+  for (const sale of state.sales || []) {
+    for (const item of sale.items || []) {
+      if (item.unit === "kg") {
+        item.unit = "g";
+        item.qty = roundQty((Number(item.qty) || 0) * 1000, "g");
+      }
+    }
+  }
+  for (const order of state.purchaseOrders || []) {
+    for (const item of order.items || []) {
+      if (item.unit === "kg") {
+        item.unit = "g";
+        item.qtyOrdered = roundQty((Number(item.qtyOrdered) || 0) * 1000, "g");
+        item.qtyReceived = roundQty((Number(item.qtyReceived) || 0) * 1000, "g");
+      }
+    }
+  }
+  return state;
 }
 
 function createSeedState() {
@@ -89,7 +133,7 @@ const db = {
     }
 
     if (loaded && typeof loaded === "object") {
-      this.state = {
+      this.state = normalizeWeightState({
         products: loaded.products || [],
         sessions: loaded.sessions || [],
         sales: loaded.sales || [],
@@ -97,10 +141,10 @@ const db = {
         suppliers: loaded.suppliers || [],
         purchaseOrders: loaded.purchaseOrders || [],
         cart: loaded.cart || [],
-      };
+      });
     } else {
       const local = this.readLocal();
-      this.state = local || createSeedState();
+      this.state = normalizeWeightState(local || createSeedState());
       await this.saveToCloud();
     }
 
@@ -241,7 +285,7 @@ const db = {
   upsertProduct(input) {
     const payload = {
       name: String(input.name || "").trim(),
-      unit: input.unit === "un" ? "un" : "kg",
+      unit: input.unit === "un" ? "un" : "g",
       price: roundMoney(input.price),
       cost: roundMoney(input.cost || 0),
       stock: Number(input.stock || 0),
@@ -324,7 +368,7 @@ const db = {
 
     const items = cart.map((item) => {
       const product = this.state.products.find((p) => p.id === item.productId);
-      const lineTotal = roundMoney(item.qty * item.unitPrice);
+      const total = lineTotal(item.qty, item.unit, item.unitPrice);
       return {
         productId: product.id,
         name: product.name,
@@ -332,7 +376,7 @@ const db = {
         qty: item.qty,
         unitPrice: item.unitPrice,
         costSnapshot: product.cost,
-        lineTotal,
+        lineTotal: total,
       };
     });
 
@@ -469,7 +513,7 @@ const db = {
     const byMethod = { dinheiro: 0, pix: 0, cartao: 0 };
     const byProduct = {};
     let total = 0;
-    let kgSold = 0;
+    let gramsSold = 0;
 
     for (const sale of sales) {
       total += sale.total;
@@ -492,7 +536,7 @@ const db = {
         byProduct[item.productId].total = roundMoney(
           byProduct[item.productId].total + item.lineTotal
         );
-        if (item.unit === "kg") kgSold += item.qty;
+        if (item.unit === "g") gramsSold += item.qty;
       }
     }
 
@@ -501,7 +545,8 @@ const db = {
       total: roundMoney(total),
       byMethod,
       byProduct: Object.values(byProduct).sort((a, b) => b.total - a.total),
-      kgSold: roundQty(kgSold, "kg"),
+      gramsSold: roundQty(gramsSold, "g"),
+      kgSold: roundQty(gramsSold, "g"), // compat
       sales,
     };
   },
@@ -518,8 +563,9 @@ function formatMoney(value) {
 function formatQty(value, unit) {
   const locale = window.elERPLocale?.LOCALE || "pt-BR";
   const n = Number(value || 0);
-  if (unit === "kg") {
-    return `${n.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: 3 })} kg`;
+  if (unit === "g" || unit === "kg") {
+    const grams = unit === "kg" ? Math.round(n * 1000) : Math.round(n);
+    return `${grams.toLocaleString(locale)} g`;
   }
   return `${n.toLocaleString(locale)} un`;
 }
@@ -535,5 +581,14 @@ function formatDateTime(iso) {
   });
 }
 
-window.elERP = { db, uid, roundMoney, roundQty, formatMoney, formatQty, formatDateTime };
+window.elERP = {
+  db,
+  uid,
+  roundMoney,
+  roundQty,
+  lineTotal,
+  formatMoney,
+  formatQty,
+  formatDateTime,
+};
 })();

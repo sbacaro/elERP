@@ -1,5 +1,5 @@
 (function () {
-const { db, roundMoney, roundQty, formatMoney, formatQty, formatDateTime } = window.elERP;
+const { db, roundMoney, roundQty, lineTotal, formatMoney, formatQty, formatDateTime } = window.elERP;
 const { t, payMethodLabel, poStatusLabel } = window.elERPLocale;
 const scale = window.elERPScale;
 
@@ -208,7 +208,7 @@ function renderPos() {
       return `
         <button type="button" class="product-tile" data-add="${p.id}">
           <strong>${escapeHtml(p.name)}</strong>
-          <span>${money(p.price)} / ${p.unit}</span>
+          <span>${p.unit === "g" ? `${money(p.price)} / kg` : `${money(p.price)} / ${p.unit}`}</span>
           <span class="stock ${low ? "low" : ""}">${formatQty(p.stock, p.unit)}${low ? ` · ${t.stockLowShort}` : ""}</span>
         </button>`;
     })
@@ -225,12 +225,16 @@ function renderCart() {
   } else {
     list.innerHTML = cart
       .map((item, idx) => {
-        const line = roundMoney(item.qty * item.unitPrice);
+        const line = lineTotal(item.qty, item.unit, item.unitPrice);
+        const priceLabel =
+          item.unit === "g"
+            ? `${formatQty(item.qty, "g")} · ${money(item.unitPrice)}/kg`
+            : `${formatQty(item.qty, item.unit)} × ${money(item.unitPrice)}`;
         return `
           <li class="cart-item">
             <div>
               <strong>${escapeHtml(item.name)}</strong>
-              <div class="meta">${formatQty(item.qty, item.unit)} × ${money(item.unitPrice)}</div>
+              <div class="meta">${priceLabel}</div>
             </div>
             <div style="text-align:right">
               <strong>${money(line)}</strong>
@@ -241,7 +245,7 @@ function renderCart() {
       .join("");
   }
 
-  const total = roundMoney(cart.reduce((s, i) => s + i.qty * i.unitPrice, 0));
+  const total = roundMoney(cart.reduce((s, i) => s + lineTotal(i.qty, i.unit, i.unitPrice), 0));
   document.getElementById("cartTotal").textContent = money(total);
 
   const payInput = document.getElementById("payAmount");
@@ -282,7 +286,8 @@ function renderScaleStatus() {
   if (lastText) {
     if (!st.last) lastText.textContent = t.scaleNone;
     else {
-      lastText.textContent = `${formatQty(st.last.kg, "kg")} · ${
+      const grams = st.last.grams ?? Math.round((st.last.kg || 0) * 1000);
+      lastText.textContent = `${formatQty(grams, "g")} · ${
         st.last.stable ? t.scaleStable : t.scaleUnstable
       }`;
     }
@@ -326,10 +331,10 @@ function addProductToCart(productId) {
   openDialog(
     t.weightTitle(product.name),
     `
-      <p class="muted">${t.priceStock(money(product.price), formatQty(product.stock, "kg"))}</p>
+      <p class="muted">${t.priceStock(money(product.price), formatQty(product.stock, "g"))}</p>
       <div class="field">
-        <label for="dlgWeight">${t.weightKg}</label>
-        <input id="dlgWeight" type="number" min="0.001" step="0.001" placeholder="${t.weightPlaceholder}" autofocus />
+        <label for="dlgWeight">${t.weightG}</label>
+        <input id="dlgWeight" type="number" min="1" step="1" placeholder="${t.weightPlaceholder}" autofocus />
       </div>
       <div class="scale-live card" style="box-shadow:none;margin:0 0 0.75rem;padding:0.75rem">
         <div class="card-head" style="margin-bottom:0.35rem">
@@ -345,20 +350,20 @@ function addProductToCart(productId) {
       </div>
     `,
     (body) => {
-      const qty = roundQty(body.querySelector("#dlgWeight").value, "kg");
+      const qty = roundQty(body.querySelector("#dlgWeight").value, "g");
       if (!(qty > 0)) throw new Error(t.errors.invalidWeight);
       if (qty > product.stock) throw new Error(t.stockInsufficient);
       const cart = db.state.cart.slice();
       cart.push({
         productId: product.id,
         name: product.name,
-        unit: "kg",
+        unit: "g",
         qty,
         unitPrice: product.price,
       });
       db.setCart(cart);
       renderCart();
-      toast(`${product.name}: ${formatQty(qty, "kg")}`);
+      toast(`${product.name}: ${formatQty(qty, "g")}`);
     },
     t.add
   );
@@ -368,6 +373,13 @@ function addProductToCart(productId) {
     weightInput?.focus();
     wireWeightDialogScale(weightInput);
   });
+}
+
+function readingGrams(reading) {
+  if (!reading) return null;
+  if (reading.grams != null) return Math.round(reading.grams);
+  if (reading.kg != null) return Math.round(Number(reading.kg) * 1000);
+  return null;
 }
 
 function wireWeightDialogScale(weightInput) {
@@ -385,30 +397,29 @@ function wireWeightDialogScale(weightInput) {
       badge.className = `badge ${st.connected ? "ok" : ""}`;
     }
     if (reading) {
-      if (!st.last) reading.textContent = t.scaleNone;
+      const g = readingGrams(st.last);
+      if (!g) reading.textContent = t.scaleNone;
       else {
-        reading.textContent = `${formatQty(st.last.kg, "kg")} · ${
+        reading.textContent = `${formatQty(g, "g")} · ${
           st.last.stable ? t.scaleStable : t.scaleUnstable
         }`;
       }
     }
-    if (useBtn) useBtn.disabled = !st.last?.kg;
+    if (useBtn) useBtn.disabled = !readingGrams(st.last);
+  };
+
+  const applyReading = (rec, force = false) => {
+    const g = readingGrams(rec);
+    if (!g || !weightInput) return;
+    if (force || !weightInput.value || document.activeElement !== weightInput) {
+      if (rec.stable || force || !weightInput.value) weightInput.value = String(g);
+    }
   };
 
   const onScale = (ev) => {
     if (ev.type === "weight" || ev.type === "connected" || ev.type === "disconnected") {
       refresh();
-      if (
-        ev.type === "weight" &&
-        ev.reading?.stable &&
-        scale.getConfig().autoUseStable &&
-        weightInput &&
-        document.activeElement !== weightInput
-      ) {
-        weightInput.value = String(ev.reading.kg);
-      } else if (ev.type === "weight" && ev.reading?.kg && weightInput && !weightInput.value) {
-        weightInput.value = String(ev.reading.kg);
-      }
+      if (ev.type === "weight" && ev.reading) applyReading(ev.reading);
     }
   };
 
@@ -418,11 +429,8 @@ function wireWeightDialogScale(weightInput) {
 
   useBtn?.addEventListener("click", (e) => {
     e.preventDefault();
-    const kg = scale.status().last?.kg;
-    if (kg && weightInput) {
-      weightInput.value = String(kg);
-      weightInput.focus();
-    }
+    applyReading(scale.status().last, true);
+    weightInput?.focus();
   });
 
   connectBtn?.addEventListener("click", async (e) => {
@@ -455,7 +463,7 @@ function checkout() {
     if (!db.state.cart.length) throw new Error(t.errors.emptyCart);
     const method = document.getElementById("payMethod").value;
     const amount = roundMoney(document.getElementById("payAmount").value);
-    const total = roundMoney(db.state.cart.reduce((s, i) => s + i.qty * i.unitPrice, 0));
+    const total = roundMoney(db.state.cart.reduce((s, i) => s + lineTotal(i.qty, i.unit, i.unitPrice), 0));
     if (Math.abs(amount - total) > 0.009) {
       throw new Error(t.errors.payMustMatchTotal);
     }
@@ -500,18 +508,18 @@ function openProductForm(product = null) {
         <div class="field">
           <label>${t.unit}</label>
           <select id="pUnit">
-            <option value="kg" ${!product || product.unit === "kg" ? "selected" : ""}>kg</option>
+            <option value="g" ${!product || product.unit === "g" || product.unit === "kg" ? "selected" : ""}>g (peso)</option>
             <option value="un" ${product?.unit === "un" ? "selected" : ""}>un</option>
           </select>
         </div>
         <div class="field">
-          <label>${t.colPrice}</label>
+          <label>${t.colPrice}${product?.unit !== "un" ? " / kg" : ""}</label>
           <input id="pPrice" type="number" min="0" step="0.01" value="${product?.price ?? ""}" />
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>${t.colCost}</label>
+          <label>${t.colCost}${product?.unit !== "un" ? " / kg" : ""}</label>
           <input id="pCost" type="number" min="0" step="0.01" value="${product?.cost ?? 0}" />
         </div>
         <div class="field">
@@ -734,7 +742,7 @@ function renderReportHtml(report, session) {
     <div class="stats">
       <div class="stat"><label>${t.sales}</label><strong>${report.salesCount}</strong></div>
       <div class="stat"><label>${t.total}</label><strong>${money(report.total)}</strong></div>
-      <div class="stat"><label>${t.kgSold}</label><strong>${formatQty(report.kgSold, "kg")}</strong></div>
+      <div class="stat"><label>${t.gramsSold}</label><strong>${formatQty(report.gramsSold || report.kgSold || 0, "g")}</strong></div>
       <div class="stat"><label>${t.cashFloat}</label><strong>${money(session.openingFloat)}</strong></div>
     </div>
     <div class="card" style="margin-bottom:1rem">

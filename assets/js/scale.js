@@ -210,6 +210,7 @@
       if (!parsed?.kg) return;
       this.last = {
         kg: parsed.kg,
+        grams: Math.round(Number(parsed.kg) * 1000),
         stable: !!parsed.stable,
         raw: parsed.raw || chunk,
         protocol: parsed.protocol || proto.id,
@@ -240,7 +241,11 @@
         const parsed = parseWeightBarcode(code);
         if (parsed) {
           e.preventDefault();
-          this.last = { ...parsed, at: Date.now() };
+          this.last = {
+            ...parsed,
+            grams: parsed.grams ?? Math.round(Number(parsed.kg) * 1000),
+            at: Date.now(),
+          };
           this.emit({ type: "weight", reading: this.last });
         }
         return;
