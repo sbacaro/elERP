@@ -38,6 +38,20 @@ Em **Authentication → Providers → Email**, desative **Confirm email** se qui
 
 \* Loja e Equipe só para o papel **owner**. Cashier vê só Operação.
 
+## Impressoras (Brasil)
+
+Gestão → **Impressoras** configura o dispositivo deste computador (localStorage).
+
+| Tipo | Como imprime no Pages |
+|------|------------------------|
+| Não fiscal ESC/POS (Epson, Bematech, Elgin, Daruma, Sweda, Tanca, Gertec…) | USB/Serial (Chrome Web Serial), Bluetooth (limitado), bridge HTTP raw, ou diálogo do navegador |
+| ECF legado | Bridge fiscal local (DLL/ACBr Monitor) — o browser não fala com a DLL diretamente |
+| SAT / MFe | Bridge fiscal + extrato térmico opcional |
+| NFC-e | DANFE no navegador ou térmico ESC/POS |
+
+Bridge de rede esperado: `POST` bytes em `Content-Type: application/octet-stream` (ex. `http://127.0.0.1:9100/print`).  
+Bridge fiscal: `POST` JSON em `/fiscal` com `{ type, printerId, sale, settings }`.
+
 ## O que já está no PDV
 
 - Venda g / kg / un, complementos, pagamentos múltiplos (dinheiro/Pix/cartão) com **troco**

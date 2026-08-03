@@ -37,6 +37,7 @@ const t = {
     team: "Equipe",
     suppliers: "Fornecedores",
     inventory: "Inventário",
+    printers: "Impressoras",
   },
 
   sessionOpen: (floatLabel) => `Caixa aberto · fundo ${floatLabel}`,
@@ -253,6 +254,16 @@ const t = {
   qtyDelta: "Diferença (+/-)",
   stockAdjusted: "Estoque ajustado",
 
+  printersTitle: "Impressoras",
+  printersHelp:
+    "Suporte a térmicas ESC/POS (Epson, Bematech, Elgin, Daruma, Sweda, Tanca…), ECF legado e SAT/MFe via bridge local. No navegador puro use USB Serial (Chrome) ou a impressão do sistema.",
+  printerSaved: "Impressora salva neste computador",
+  printerTestOk: "Teste enviado à impressora",
+  printerConnected: "Porta USB/serial conectada",
+  printerSerialUnsupported: "Web Serial exige Chrome/Edge em HTTPS.",
+  printerBridgeHint: "Bridge de rede: serviço local que recebe bytes ESC/POS (porta 9100). Bridge fiscal: ACBr Monitor / wrapper das DLLs (BemaFI32, Daruma…).",
+  printerStatus: "Situação da impressora",
+
   dialogCancel: "Cancelar",
   dialogConfirm: "Confirmar",
   footerStorage: "Dados na sua conta Supabase",
@@ -290,6 +301,9 @@ const t = {
     cannotAddOwner: "O dono é criado automaticamente.",
     cannotRemoveOwner: "Não é possível remover o dono.",
     popupBlocked: "Permita pop-ups para imprimir o cupom.",
+    printerError: "Falha ao imprimir. Verifique a impressora ou o bridge local.",
+    serialUnsupported: "USB/Serial não suportado neste navegador.",
+    btUnsupported: "Bluetooth não suportado neste navegador.",
   },
 };
 

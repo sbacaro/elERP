@@ -81,6 +81,7 @@
           <button type="button" data-panel="panel-suppliers">Fornecedores</button>
           <button type="button" data-panel="panel-catalog">Catálogo</button>
           <button type="button" data-panel="panel-scale">Balança</button>
+          <button type="button" data-panel="panel-printers">Impressoras</button>
           <button type="button" data-panel="panel-store" class="owner-only">Loja</button>
           <button type="button" data-panel="panel-team" class="owner-only">Equipe</button>
         </nav>
@@ -248,6 +249,89 @@
           </div>
         </section>
 
+        <section class="panel" id="panel-printers">
+          <div class="card">
+            <div class="card-head"><h2 id="labelPrinters">Impressoras</h2></div>
+            <p class="muted" id="printersHelp"></p>
+            <form id="printerForm" class="form-stack">
+              <div class="field">
+                <label for="prKind">Tipo</label>
+                <select id="prKind" class="control">
+                  <option value="">Todos</option>
+                  <option value="nonfiscal">Não fiscal</option>
+                  <option value="fiscal_ecf">Fiscal ECF (legado)</option>
+                  <option value="sat">SAT / MFe</option>
+                  <option value="nfce_printer">NFC-e</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prModel">Modelo</label>
+                <select id="prModel" class="control"></select>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="prConn">Conexão</label>
+                  <select id="prConn" class="control"></select>
+                </div>
+                <div class="field">
+                  <label for="prPaper">Papel (mm)</label>
+                  <select id="prPaper" class="control">
+                    <option value="58">58</option>
+                    <option value="80">80</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="prBaud">Baud (USB/serial)</label>
+                  <select id="prBaud" class="control">
+                    <option value="9600">9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                    <option value="115200">115200</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="prDrawer">Gaveta de dinheiro</label>
+                  <select id="prDrawer" class="control">
+                    <option value="0">Não abrir</option>
+                    <option value="1">Abrir ao imprimir</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="prBridge">URL bridge rede (ESC/POS raw)</label>
+                <input id="prBridge" class="control" placeholder="http://127.0.0.1:9100/print" />
+              </div>
+              <div class="field">
+                <label for="prFiscalBridge">URL bridge fiscal (ECF/SAT/DLL)</label>
+                <input id="prFiscalBridge" class="control" placeholder="http://127.0.0.1:3434/fiscal" />
+              </div>
+              <div class="field">
+                <label for="prAuto">Após a venda</label>
+                <select id="prAuto" class="control">
+                  <option value="1">Imprimir automaticamente</option>
+                  <option value="0">Só sob demanda</option>
+                </select>
+              </div>
+              <div class="toolbar">
+                <button type="submit" class="btn" id="btnPrinterSave">Salvar impressora</button>
+                <button type="button" class="btn btn-secondary" id="btnPrinterConnect">Conectar USB/Serial</button>
+                <button type="button" class="btn btn-ghost" id="btnPrinterTest">Teste de impressão</button>
+              </div>
+              <p class="field-hint" id="printerStatusText"></p>
+            </form>
+            <div class="table-wrap" style="margin-top:1rem">
+              <table>
+                <thead>
+                  <tr><th>Marca</th><th>Modelo</th><th>Tipo</th><th>Protocolo</th></tr>
+                </thead>
+                <tbody id="printerCatalogBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" id="panel-catalog">
           <div class="card">
             <div class="card-head"><h2 id="labelCatalog">Catálogo de bebidas</h2></div>
@@ -344,10 +428,13 @@
     <script src="./assets/js/i18n.js"></script>
     <script src="./assets/js/db.js"></script>
     <script src="./assets/js/offline.js"></script>
-    <script src="./assets/js/receipt.js"></script>
     <script src="./assets/js/scale-protocols.js"></script>
     <script src="./assets/js/scale.js"></script>
     <script src="./assets/js/catalog.js"></script>
+    <script src="./assets/js/printers-catalog.js"></script>
+    <script src="./assets/js/printers-escpos.js"></script>
+    <script src="./assets/js/printers.js"></script>
+    <script src="./assets/js/receipt.js"></script>
     <script src="./assets/js/app.js"></script>
     <script>
       if ("serviceWorker" in navigator) {

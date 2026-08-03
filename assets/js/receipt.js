@@ -56,7 +56,7 @@
       </div>`;
   }
 
-  function printReceipt(opts) {
+  function printViaBrowser(opts) {
     const html = buildReceiptHtml(opts);
     const win = window.open("", "_blank", "noopener,noreferrer,width=420,height=720");
     if (!win) throw new Error("POPUP_BLOCKED");
@@ -79,5 +79,13 @@
     win.document.close();
   }
 
-  window.elERPReceipt = { buildReceiptHtml, printReceipt };
+  async function printReceipt(opts) {
+    if (window.elERPPrint?.printSaleReceipt) {
+      return window.elERPPrint.printSaleReceipt(opts);
+    }
+    printViaBrowser(opts);
+    return { ok: true, via: "browser" };
+  }
+
+  window.elERPReceipt = { buildReceiptHtml, printReceipt, printViaBrowser };
 })();

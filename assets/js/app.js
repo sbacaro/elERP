@@ -5,6 +5,8 @@ const scale = window.elERPScale;
 const catalog = window.elERPCatalog;
 const offline = window.elERPOffline;
 const receipt = window.elERPReceipt;
+const printers = window.elERPPrint;
+const printerCatalog = window.elERPPrinterCatalog;
 
 const PANEL_AREA = {
   "panel-pos": "ops",
@@ -15,6 +17,7 @@ const PANEL_AREA = {
   "panel-suppliers": "mgmt",
   "panel-catalog": "mgmt",
   "panel-scale": "mgmt",
+  "panel-printers": "mgmt",
   "panel-store": "mgmt",
   "panel-team": "mgmt",
 };
@@ -109,6 +112,7 @@ function applyStaticLabels() {
     "panel-suppliers": t.nav.suppliers,
     "panel-day": t.nav.day,
     "panel-scale": t.nav.scale,
+    "panel-printers": t.nav.printers,
     "panel-catalog": t.nav.catalog,
     "panel-store": t.nav.store,
     "panel-team": t.nav.team,
@@ -212,6 +216,8 @@ function applyStaticLabels() {
   setText("#btnSignup", t.signup);
   setText("#loginHint", t.orCreateAccount);
   setText("#labelScale", t.scaleTitle);
+  setText("#labelPrinters", t.printersTitle);
+  setText("#printersHelp", t.printersHelp);
   setText("#scaleHelp", t.scaleHelp);
   setText("#labelScaleProtocol", t.scaleProtocol);
   setText("#labelScaleBaud", t.scaleBaud);
@@ -277,6 +283,7 @@ function switchPanel(id) {
   if (id === "panel-suppliers") renderSuppliers();
   if (id === "panel-day") renderDay();
   if (id === "panel-scale") renderScaleStatus();
+  if (id === "panel-printers") renderPrintersPanel();
   if (id === "panel-catalog") renderCatalog();
   if (id === "panel-store") renderStoreForm();
   if (id === "panel-team") renderTeam();
@@ -797,10 +804,14 @@ async function checkout() {
 
     const sale = await db.confirmSale({ payments });
     toast(t.saleRegistered(money(sale.total)));
-    try {
-      receipt?.printReceipt({ settings: db.state.settings, sale, change: sale.change });
-    } catch (e) {
-      if (e?.message === "POPUP_BLOCKED") toast(t.errors.popupBlocked, true);
+    const auto = printers?.getConfig?.()?.autoPrint !== false;
+    if (auto) {
+      try {
+        await receipt?.printReceipt({ settings: db.state.settings, sale, change: sale.change });
+      } catch (e) {
+        if (e?.message === "POPUP_BLOCKED") toast(t.errors.popupBlocked, true);
+        else toast(t.errors.printerError, true);
+      }
     }
     payLines = [{ method: "dinheiro", amount: "" }];
     renderPos();
@@ -1806,6 +1817,109 @@ function closeCashSession() {
   );
 }
 
+function fillPrinterModelSelect(kindFilter = "") {
+  const sel = document.getElementById("prModel");
+  if (!sel || !printerCatalog) return;
+  const cfg = printers?.getConfig?.() || {};
+  const list = printerCatalog.printers.filter((p) => !kindFilter || p.kind === kindFilter);
+  sel.innerHTML = list
+    .map(
+      (p) =>
+        `<option value="${p.id}" ${p.id === cfg.printerId ? "selected" : ""}>${escapeHtml(p.brand)} — ${escapeHtml(p.model)}</option>`
+    )
+    .join("");
+}
+
+function fillPrinterConnectionSelect() {
+  const modelSel = document.getElementById("prModel");
+  const connSel = document.getElementById("prConn");
+  if (!modelSel || !connSel || !printerCatalog) return;
+  const printer = printerCatalog.find(modelSel.value);
+  const cfg = printers?.getConfig?.() || {};
+  const caps = printers?.capabilities?.() || {};
+  const allowed = printer?.connections || ["browser"];
+  connSel.innerHTML = printerCatalog.connections
+    .filter((c) => allowed.includes(c.id))
+    .map((c) => {
+      const supported = caps[c.id] !== false;
+      return `<option value="${c.id}" ${c.id === cfg.connection ? "selected" : ""} ${supported ? "" : "disabled"}>${escapeHtml(c.label)}${supported ? "" : " (indisponível)"}</option>`;
+    })
+    .join("");
+  const paper = document.getElementById("prPaper");
+  if (paper && printer?.paper?.length) {
+    paper.innerHTML = printer.paper
+      .map((mm) => `<option value="${mm}" ${Number(cfg.paperMm) === mm ? "selected" : ""}>${mm}</option>`)
+      .join("");
+  }
+}
+
+function renderPrinterCatalogTable(kindFilter = "") {
+  const body = document.getElementById("printerCatalogBody");
+  if (!body || !printerCatalog) return;
+  const rows = printerCatalog.printers.filter((p) => !kindFilter || p.kind === kindFilter);
+  body.innerHTML = rows
+    .map(
+      (p) => `<tr>
+        <td>${escapeHtml(p.brand)}</td>
+        <td>${escapeHtml(p.model)}</td>
+        <td><span class="badge">${escapeHtml(printerCatalog.kindLabel(p.kind))}</span></td>
+        <td>${escapeHtml(p.protocol)}</td>
+      </tr>`
+    )
+    .join("");
+}
+
+function renderPrintersPanel() {
+  if (!printers || !printerCatalog) return;
+  const cfg = printers.getConfig();
+  const kind = document.getElementById("prKind");
+  if (kind && !kind.dataset.ready) {
+    kind.dataset.ready = "1";
+  }
+  const current = printerCatalog.find(cfg.printerId);
+  if (kind) kind.value = current?.kind || "";
+  fillPrinterModelSelect(kind?.value || "");
+  const model = document.getElementById("prModel");
+  if (model && cfg.printerId) model.value = cfg.printerId;
+  fillPrinterConnectionSelect();
+  const conn = document.getElementById("prConn");
+  if (conn) conn.value = cfg.connection;
+  const paper = document.getElementById("prPaper");
+  if (paper) paper.value = String(cfg.paperMm || 80);
+  const baud = document.getElementById("prBaud");
+  if (baud) baud.value = String(cfg.baudRate || 9600);
+  const drawer = document.getElementById("prDrawer");
+  if (drawer) drawer.value = cfg.openDrawer ? "1" : "0";
+  const bridge = document.getElementById("prBridge");
+  if (bridge) bridge.value = cfg.bridgeUrl || "";
+  const fiscal = document.getElementById("prFiscalBridge");
+  if (fiscal) fiscal.value = cfg.fiscalBridgeUrl || "";
+  const auto = document.getElementById("prAuto");
+  if (auto) auto.value = cfg.autoPrint === false ? "0" : "1";
+  renderPrinterCatalogTable(kind?.value || "");
+  const st = printers.status();
+  const statusEl = document.getElementById("printerStatusText");
+  if (statusEl) {
+    const p = st.printer;
+    statusEl.textContent = p
+      ? `${p.brand} ${p.model} · ${st.config.connection} · ${st.connected ? t.printerConnected : t.printerStatus} · ${t.printerBridgeHint}`
+      : t.printerStatus;
+  }
+}
+
+function readPrinterFormConfig() {
+  return {
+    printerId: document.getElementById("prModel")?.value || "generic_escpos",
+    connection: document.getElementById("prConn")?.value || "browser",
+    paperMm: Number(document.getElementById("prPaper")?.value) || 80,
+    baudRate: Number(document.getElementById("prBaud")?.value) || 9600,
+    openDrawer: document.getElementById("prDrawer")?.value === "1",
+    bridgeUrl: document.getElementById("prBridge")?.value?.trim() || "http://127.0.0.1:9100/print",
+    fiscalBridgeUrl: document.getElementById("prFiscalBridge")?.value?.trim() || "http://127.0.0.1:3434/fiscal",
+    autoPrint: document.getElementById("prAuto")?.value !== "0",
+  };
+}
+
 function bindEvents() {
   ui.areaButtons.forEach((btn) => {
     btn.addEventListener("click", () => setArea(btn.dataset.area));
@@ -2004,6 +2118,41 @@ function bindEvents() {
     if (scale.status().connected) scale.startPolling();
     toast(t.scaleSaved);
     renderScaleStatus();
+  });
+
+  document.getElementById("prKind")?.addEventListener("change", () => {
+    const kind = document.getElementById("prKind").value;
+    fillPrinterModelSelect(kind);
+    fillPrinterConnectionSelect();
+    renderPrinterCatalogTable(kind);
+  });
+  document.getElementById("prModel")?.addEventListener("change", fillPrinterConnectionSelect);
+  document.getElementById("printerForm")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    printers?.setConfig(readPrinterFormConfig());
+    toast(t.printerSaved);
+    renderPrintersPanel();
+  });
+  document.getElementById("btnPrinterConnect")?.addEventListener("click", async () => {
+    try {
+      printers?.setConfig(readPrinterFormConfig());
+      await printers.connectSerial();
+      toast(t.printerConnected);
+      renderPrintersPanel();
+    } catch (err) {
+      if (err?.message === "SERIAL_UNSUPPORTED") toast(t.printerSerialUnsupported, true);
+      else toast(err.message || t.errors.printerError, true);
+    }
+  });
+  document.getElementById("btnPrinterTest")?.addEventListener("click", async () => {
+    try {
+      printers?.setConfig(readPrinterFormConfig());
+      await printers.printTest();
+      toast(t.printerTestOk);
+    } catch (err) {
+      if (err?.message === "POPUP_BLOCKED") toast(t.errors.popupBlocked, true);
+      else toast(err.message || t.errors.printerError, true);
+    }
   });
 
   scale?.on((ev) => {
