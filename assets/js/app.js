@@ -78,6 +78,9 @@ function applyRoleVisibility() {
   const role = db.state?.role || "owner";
   const isCashier = role === "cashier";
   const isOwner = role === "owner";
+  document.body.classList.toggle("role-cashier", isCashier);
+  document.body.classList.toggle("role-owner", isOwner);
+  document.body.classList.toggle("role-manager", role === "manager");
   document.querySelectorAll(".mgmt-only").forEach((el) => setHidden(el, isCashier));
   document.querySelectorAll(".owner-only").forEach((el) => setHidden(el, !isOwner));
   if (isCashier && ui.currentArea === "mgmt") {
