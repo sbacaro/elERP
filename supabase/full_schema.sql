@@ -11,7 +11,7 @@ create table if not exists public.store_products (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   name text not null,
-  unit text not null check (unit in ('g', 'un')),
+  unit text not null check (unit in ('g', 'kg', 'un')),
   price numeric(12,2) not null default 0,
   cost numeric(12,2) not null default 0,
   stock numeric(14,3) not null default 0,
@@ -310,4 +310,23 @@ do $$
 begin
   alter publication supabase_realtime add table public.store_cart_items;
 exception when others then null;
+end $$;
+
+-- Permitir unidade kg em bases já criadas com o check antigo (g, un)
+do $$
+declare
+  cname text;
+begin
+  select c.conname into cname
+  from pg_constraint c
+  where c.conrelid = 'public.store_products'::regclass
+    and c.contype = 'c'
+    and pg_get_constraintdef(c.oid) ilike '%unit%';
+  if cname is not null then
+    execute format('alter table public.store_products drop constraint %I', cname);
+  end if;
+  alter table public.store_products
+    add constraint store_products_unit_check check (unit in ('g', 'kg', 'un'));
+exception when duplicate_object then
+  null;
 end $$;

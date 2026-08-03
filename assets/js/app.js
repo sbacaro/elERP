@@ -166,8 +166,9 @@ function refreshSessionPill() {
     : `<span class="dot"></span> ${t.sessionClosed}`;
 }
 
-function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm) {
+function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm, options = {}) {
   const backdrop = document.getElementById("dialogBackdrop");
+  const panel = document.getElementById("dialogPanel");
   const titleEl = document.getElementById("dialogTitle");
   const bodyEl = document.getElementById("dialogBody");
   const confirmBtn = document.getElementById("dialogConfirm");
@@ -176,16 +177,18 @@ function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm) 
   titleEl.textContent = title;
   bodyEl.innerHTML = bodyHtml;
   confirmBtn.textContent = confirmLabel;
+  panel?.classList.toggle("dialog-wide", Boolean(options.wide));
   backdrop.classList.add("open");
 
   const close = () => {
     backdrop.classList.remove("open");
+    panel?.classList.remove("dialog-wide");
     confirmBtn.onclick = null;
     cancelBtn.onclick = null;
+    backdrop.onkeydown = null;
   };
 
-  cancelBtn.onclick = close;
-  confirmBtn.onclick = async () => {
+  const submit = async () => {
     try {
       await onConfirm(bodyEl);
       close();
@@ -193,6 +196,49 @@ function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm) 
       toast(err.message || String(err), true);
     }
   };
+
+  cancelBtn.onclick = close;
+  confirmBtn.onclick = submit;
+  backdrop.onkeydown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+    }
+    if (e.key === "Enter" && e.target?.tagName !== "TEXTAREA" && e.target?.tagName !== "BUTTON") {
+      const tag = e.target?.tagName;
+      if (tag === "INPUT" || tag === "SELECT") {
+        e.preventDefault();
+        submit();
+      }
+    }
+  };
+
+  requestAnimationFrame(() => {
+    bodyEl.querySelector("input, select, textarea")?.focus?.();
+  });
+}
+
+function priceLabel(unit, price) {
+  if (unit === "un") return `${money(price)} / un`;
+  return `${money(price)} / kg`;
+}
+
+function syncProductFormLabels(root = document) {
+  const unit = root.querySelector("#pUnit")?.value || "g";
+  const priceLab = root.querySelector("#pPriceLabel");
+  const costLab = root.querySelector("#pCostLabel");
+  const stockLab = root.querySelector("#pStockLabel");
+  const minLab = root.querySelector("#pMinLabel");
+  const stock = root.querySelector("#pStock");
+  const min = root.querySelector("#pMin");
+  const suffix = unit === "un" ? t.pricePerUn : t.pricePerKg;
+  if (priceLab) priceLab.textContent = `${t.colPrice}${suffix}`;
+  if (costLab) costLab.textContent = `${t.colCost}${suffix}`;
+  if (stockLab) stockLab.textContent = t.stockIn(unit);
+  if (minLab) minLab.textContent = t.minStockIn(unit);
+  const step = unit === "g" ? "1" : unit === "kg" ? "0.001" : "1";
+  if (stock) stock.step = step;
+  if (min) min.step = step;
 }
 
 function renderPos() {
@@ -218,7 +264,7 @@ function renderPos() {
       return `
         <button type="button" class="product-tile" data-add="${p.id}">
           <strong>${escapeHtml(p.name)}</strong>
-          <span>${p.unit === "g" ? `${money(p.price)} / kg` : `${money(p.price)} / ${p.unit}`}</span>
+          <span>${priceLabel(p.unit, p.price)}</span>
           <span class="stock ${low ? "low" : ""}">${formatQty(p.stock, p.unit)}${low ? ` · ${t.stockLowShort}` : ""}</span>
         </button>`;
     })
@@ -236,17 +282,19 @@ function renderCart() {
     list.innerHTML = cart
       .map((item, idx) => {
         const line = lineTotal(item.qty, item.unit, item.unitPrice);
-        const priceLabel =
+        const priceLabelText =
           item.unit === "g"
             ? `${formatQty(item.qty, "g")} · ${money(item.unitPrice)}/kg`
-            : `${formatQty(item.qty, item.unit)} × ${money(item.unitPrice)}`;
+            : item.unit === "kg"
+              ? `${formatQty(item.qty, "kg")} · ${money(item.unitPrice)}/kg`
+              : `${formatQty(item.qty, item.unit)} × ${money(item.unitPrice)}`;
         return `
           <li class="cart-item">
             <div>
               <strong>${escapeHtml(item.name)}</strong>
-              <div class="meta">${priceLabel}</div>
+              <div class="meta">${priceLabelText}</div>
             </div>
-            <div style="text-align:right">
+            <div class="cart-item-actions">
               <strong>${money(line)}</strong>
               <div><button type="button" class="btn btn-ghost btn-sm" data-remove-cart="${idx}">${t.remove}</button></div>
             </div>
@@ -318,7 +366,7 @@ function addProductToCart(productId) {
   if (product.unit === "un") {
     const cart = db.state.cart.slice();
     const existing = cart.find((c) => c.productId === product.id && c.unit === "un");
-    const nextQty = (existing?.qty || 0) + 1;
+    const nextQty = roundQty((existing?.qty || 0) + 1, "un");
     if (nextQty > product.stock) {
       toast(t.stockInsufficient, true);
       return;
@@ -338,42 +386,50 @@ function addProductToCart(productId) {
     return;
   }
 
+  const sellUnit = product.unit === "kg" ? "kg" : "g";
+  const weightLabel = sellUnit === "kg" ? t.weightKg : t.weightG;
+  const placeholder = sellUnit === "kg" ? t.weightPlaceholderKg : t.weightPlaceholder;
+  const step = sellUnit === "kg" ? "0.001" : "1";
+  const min = sellUnit === "kg" ? "0.001" : "1";
+
   openDialog(
     t.weightTitle(product.name),
     `
-      <p class="muted">${t.priceStock(money(product.price), formatQty(product.stock, "g"))}</p>
-      <div class="field">
-        <label for="dlgWeight">${t.weightG}</label>
-        <input id="dlgWeight" type="number" min="1" step="1" placeholder="${t.weightPlaceholder}" autofocus />
-      </div>
-      <div class="scale-live card" style="box-shadow:none;margin:0 0 0.75rem;padding:0.75rem">
-        <div class="card-head" style="margin-bottom:0.35rem">
-          <strong>${t.scaleLive}</strong>
-          <span id="dlgScaleBadge" class="badge">${t.scaleDisconnected}</span>
+      <div class="form-stack">
+        <p class="field-hint">${t.priceStock(priceLabel(product.unit, product.price), formatQty(product.stock, product.unit))}</p>
+        <div class="field">
+          <label for="dlgWeight">${weightLabel}</label>
+          <input id="dlgWeight" class="control" type="number" min="${min}" step="${step}" placeholder="${placeholder}" autofocus />
         </div>
-        <div id="dlgScaleReading" class="muted">${t.scaleNone}</div>
-        <div class="toolbar" style="margin:0.55rem 0 0">
-          <button type="button" class="btn btn-secondary btn-sm" id="dlgScaleUse">${t.useScaleWeight}</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="dlgScaleConnect">${t.scaleConnect}</button>
+        <div class="scale-live">
+          <div class="card-head">
+            <strong>${t.scaleLive}</strong>
+            <span id="dlgScaleBadge" class="badge">${t.scaleDisconnected}</span>
+          </div>
+          <div id="dlgScaleReading" class="muted">${t.scaleNone}</div>
+          <div class="toolbar">
+            <button type="button" class="btn btn-secondary btn-sm" id="dlgScaleUse">${t.useScaleWeight}</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="dlgScaleConnect">${t.scaleConnect}</button>
+          </div>
+          <p class="field-hint">${t.scaleHintBarcode}</p>
         </div>
-        <p class="muted" style="margin:0.45rem 0 0;font-size:0.85rem">${t.scaleHintBarcode}</p>
       </div>
     `,
     (body) => {
-      const qty = roundQty(body.querySelector("#dlgWeight").value, "g");
+      const qty = roundQty(body.querySelector("#dlgWeight").value, sellUnit);
       if (!(qty > 0)) throw new Error(t.errors.invalidWeight);
       if (qty > product.stock) throw new Error(t.stockInsufficient);
       const cart = db.state.cart.slice();
       cart.push({
         productId: product.id,
         name: product.name,
-        unit: "g",
+        unit: sellUnit,
         qty,
         unitPrice: product.price,
       });
       db.setCart(cart);
       renderCart();
-      toast(`${product.name}: ${formatQty(qty, "g")}`);
+      toast(`${product.name}: ${formatQty(qty, sellUnit)}`);
     },
     t.add
   );
@@ -381,7 +437,7 @@ function addProductToCart(productId) {
   requestAnimationFrame(() => {
     const weightInput = document.getElementById("dlgWeight");
     weightInput?.focus();
-    wireWeightDialogScale(weightInput);
+    wireWeightDialogScale(weightInput, sellUnit);
   });
 }
 
@@ -392,13 +448,18 @@ function readingGrams(reading) {
   return null;
 }
 
-function wireWeightDialogScale(weightInput) {
+function wireWeightDialogScale(weightInput, sellUnit = "g") {
   if (!scale) return;
   const badge = document.getElementById("dlgScaleBadge");
   const reading = document.getElementById("dlgScaleReading");
   const useBtn = document.getElementById("dlgScaleUse");
   const connectBtn = document.getElementById("dlgScaleConnect");
   const backdrop = document.getElementById("dialogBackdrop");
+
+  const toInputQty = (grams) => {
+    if (grams == null) return null;
+    return sellUnit === "kg" ? roundQty(grams / 1000, "kg") : roundQty(grams, "g");
+  };
 
   const refresh = () => {
     const st = scale.status();
@@ -410,7 +471,8 @@ function wireWeightDialogScale(weightInput) {
       const g = readingGrams(st.last);
       if (!g) reading.textContent = t.scaleNone;
       else {
-        reading.textContent = `${formatQty(g, "g")} · ${
+        const shown = sellUnit === "kg" ? formatQty(g / 1000, "kg") : formatQty(g, "g");
+        reading.textContent = `${shown} · ${
           st.last.stable ? t.scaleStable : t.scaleUnstable
         }`;
       }
@@ -420,9 +482,10 @@ function wireWeightDialogScale(weightInput) {
 
   const applyReading = (rec, force = false) => {
     const g = readingGrams(rec);
-    if (!g || !weightInput) return;
+    const qty = toInputQty(g);
+    if (qty == null || !weightInput) return;
     if (force || !weightInput.value || document.activeElement !== weightInput) {
-      if (rec.stable || force || !weightInput.value) weightInput.value = String(g);
+      if (rec.stable || force || !weightInput.value) weightInput.value = String(qty);
     }
   };
 
@@ -497,8 +560,8 @@ function renderProducts() {
         <tr>
           <td><strong>${escapeHtml(p.name)}</strong></td>
           <td>${p.unit}</td>
-          <td>${money(p.price)}</td>
-          <td>${money(p.cost)}</td>
+          <td>${priceLabel(p.unit, p.price)}</td>
+          <td>${p.unit === "un" ? money(p.cost) : `${money(p.cost)} / kg`}</td>
           <td>${formatQty(p.stock, p.unit)} ${low ? `<span class="badge warn">${t.lowStock}</span>` : ""}</td>
           <td>${p.active ? `<span class="badge ok">${t.active}</span>` : `<span class="badge">${t.inactive}</span>`}</td>
           <td><button type="button" class="btn btn-secondary btn-sm" data-edit-product="${p.id}">${t.edit}</button></td>
@@ -584,57 +647,61 @@ async function handlePosBarcode(code) {
 }
 
 function openProductForm(product = null) {
+  const unit = product?.unit === "un" ? "un" : product?.unit === "kg" ? "kg" : "g";
   openDialog(
     product ? t.editProduct : t.newProduct,
     `
-      <div class="field">
-        <label>${t.colName}</label>
-        <input id="pName" value="${escapeAttr(product?.name || "")}" />
-      </div>
-      <div class="field-row">
+      <div class="form-stack">
         <div class="field">
-          <label>${t.catalogBarcode}</label>
-          <input id="pBarcode" inputmode="numeric" value="${escapeAttr(product?.barcode || "")}" />
+          <label for="pName">${t.colName}</label>
+          <input id="pName" class="control" value="${escapeAttr(product?.name || "")}" />
         </div>
-        <div class="field">
-          <label>SKU</label>
-          <input id="pSku" value="${escapeAttr(product?.sku || product?.barcode || "")}" />
+        <div class="field-row">
+          <div class="field">
+            <label for="pBarcode">${t.catalogBarcode}</label>
+            <input id="pBarcode" class="control" inputmode="numeric" value="${escapeAttr(product?.barcode || "")}" />
+          </div>
+          <div class="field">
+            <label for="pSku">SKU</label>
+            <input id="pSku" class="control" value="${escapeAttr(product?.sku || product?.barcode || "")}" />
+          </div>
         </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>${t.unit}</label>
-          <select id="pUnit">
-            <option value="g" ${!product || product.unit === "g" || product.unit === "kg" ? "selected" : ""}>g (peso)</option>
-            <option value="un" ${product?.unit === "un" ? "selected" : ""}>un</option>
-          </select>
+        <div class="field-row">
+          <div class="field">
+            <label for="pUnit">${t.unit}</label>
+            <select id="pUnit" class="control">
+              <option value="g" ${unit === "g" ? "selected" : ""}>${t.unitG}</option>
+              <option value="kg" ${unit === "kg" ? "selected" : ""}>${t.unitKg}</option>
+              <option value="un" ${unit === "un" ? "selected" : ""}>${t.unitUn}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label id="pPriceLabel" for="pPrice">${t.colPrice}</label>
+            <input id="pPrice" class="control" type="number" min="0" step="0.01" value="${product?.price ?? ""}" />
+          </div>
         </div>
-        <div class="field">
-          <label>${t.colPrice}${product?.unit !== "un" ? " / kg" : ""}</label>
-          <input id="pPrice" type="number" min="0" step="0.01" value="${product?.price ?? ""}" />
+        <div class="field-row">
+          <div class="field">
+            <label id="pCostLabel" for="pCost">${t.colCost}</label>
+            <input id="pCost" class="control" type="number" min="0" step="0.01" value="${product?.cost ?? 0}" />
+          </div>
+          <div class="field">
+            <label id="pStockLabel" for="pStock">${t.colStock}</label>
+            <input id="pStock" class="control" type="number" min="0" step="0.001" value="${product?.stock ?? 0}" />
+          </div>
         </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>${t.colCost}${product?.unit !== "un" ? " / kg" : ""}</label>
-          <input id="pCost" type="number" min="0" step="0.01" value="${product?.cost ?? 0}" />
-        </div>
-        <div class="field">
-          <label>${t.colStock}</label>
-          <input id="pStock" type="number" min="0" step="0.001" value="${product?.stock ?? 0}" />
-        </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>${t.minStock}</label>
-          <input id="pMin" type="number" min="0" step="0.001" value="${product?.minStock ?? 0}" />
-        </div>
-        <div class="field">
-          <label>${t.status}</label>
-          <select id="pActive">
-            <option value="1" ${product?.active !== false ? "selected" : ""}>${t.active}</option>
-            <option value="0" ${product?.active === false ? "selected" : ""}>${t.inactive}</option>
-          </select>
+        <div class="field-row">
+          <div class="field">
+            <label id="pMinLabel" for="pMin">${t.minStock}</label>
+            <input id="pMin" class="control" type="number" min="0" step="0.001" value="${product?.minStock ?? 0}" />
+          </div>
+          <div class="field">
+            <label for="pActive">${t.status}</label>
+            <select id="pActive" class="control">
+              <option value="1" ${product?.active !== false ? "selected" : ""}>${t.active}</option>
+              <option value="0" ${product?.active === false ? "selected" : ""}>${t.inactive}</option>
+            </select>
+          </div>
         </div>
       </div>
     `,
@@ -656,8 +723,15 @@ function openProductForm(product = null) {
         renderPos();
       });
     },
-    t.save
+    t.save,
+    { wide: true }
   );
+
+  requestAnimationFrame(() => {
+    const body = document.getElementById("dialogBody");
+    syncProductFormLabels(body);
+    body?.querySelector("#pUnit")?.addEventListener("change", () => syncProductFormLabels(body));
+  });
 }
 
 function renderPurchases() {
@@ -712,29 +786,31 @@ async function openNewPurchase() {
   openDialog(
     t.newPurchase,
     `
-      <div class="field">
-        <label>${t.supplier}</label>
-        <select id="poSupplier">${supplierOptions}</select>
-      </div>
-      <div class="field">
-        <label>${t.product}</label>
-        <select id="poProduct">${options}</select>
-      </div>
-      <div class="field-row">
+      <div class="form-stack">
         <div class="field">
-          <label>${t.qty}</label>
-          <input id="poQty" type="number" min="0.001" step="0.001" value="5" />
+          <label for="poSupplier">${t.supplier}</label>
+          <select id="poSupplier" class="control">${supplierOptions}</select>
         </div>
         <div class="field">
-          <label>${t.unitCost}</label>
-          <input id="poCost" type="number" min="0" step="0.01" />
+          <label for="poProduct">${t.product}</label>
+          <select id="poProduct" class="control">${options}</select>
         </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="poQty">${t.qty}</label>
+            <input id="poQty" class="control" type="number" min="0.001" step="0.001" value="5" />
+          </div>
+          <div class="field">
+            <label for="poCost">${t.unitCost}</label>
+            <input id="poCost" class="control" type="number" min="0" step="0.01" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="poNote">${t.note}</label>
+          <input id="poNote" class="control" placeholder="${t.optional}" />
+        </div>
+        <p class="field-hint">${t.purchaseHint}</p>
       </div>
-      <div class="field">
-        <label>${t.note}</label>
-        <input id="poNote" placeholder="${t.optional}" />
-      </div>
-      <p class="muted">${t.purchaseHint}</p>
     `,
     async (body) => {
       const productId = body.querySelector("#poProduct").value;
@@ -759,12 +835,15 @@ async function openNewPurchase() {
 
   const productSelect = document.getElementById("poProduct");
   const costInput = document.getElementById("poCost");
-  const syncCost = () => {
+  const qtyInput = document.getElementById("poQty");
+  const syncProductFields = () => {
     const p = db.state.products.find((x) => x.id === productSelect.value);
-    if (p) costInput.value = p.cost;
+    if (!p) return;
+    costInput.value = p.cost;
+    qtyInput.step = p.unit === "g" ? "1" : "0.001";
   };
-  productSelect.onchange = syncCost;
-  syncCost();
+  productSelect.onchange = syncProductFields;
+  syncProductFields();
 }
 
 function receivePurchase(orderId) {
@@ -773,17 +852,18 @@ function receivePurchase(orderId) {
   const fields = order.items
     .map((i) => {
       const remaining = roundQty(i.qtyOrdered - i.qtyReceived, i.unit);
+      const step = i.unit === "g" ? "1" : "0.001";
       return `
         <div class="field">
-          <label>${escapeHtml(i.name)} (${t.remaining(formatQty(remaining, i.unit))})</label>
-          <input data-rec="${i.productId}" type="number" min="0" step="0.001" value="${remaining}" />
+          <label for="rec-${i.productId}">${escapeHtml(i.name)} (${t.remaining(formatQty(remaining, i.unit))})</label>
+          <input id="rec-${i.productId}" data-rec="${i.productId}" class="control" type="number" min="0" step="${step}" value="${remaining}" />
         </div>`;
     })
     .join("");
 
   openDialog(
     t.receiveOrder,
-    fields,
+    `<div class="form-stack">${fields}</div>`,
     async (body) => {
       const receipts = [...body.querySelectorAll("[data-rec]")].map((el) => ({
         productId: el.dataset.rec,
@@ -850,7 +930,7 @@ function renderReportHtml(report, session) {
       <div class="stat"><label>${t.gramsSold}</label><strong>${formatQty(report.gramsSold || report.kgSold || 0, "g")}</strong></div>
       <div class="stat"><label>${t.cashFloat}</label><strong>${money(session.openingFloat)}</strong></div>
     </div>
-    <div class="card" style="margin-bottom:1rem">
+    <div class="card stack-gap">
       <h3>${t.byPayment}</h3>
       <div class="stats">
         <div class="stat"><label>${payMethodLabel("dinheiro")}</label><strong>${money(report.byMethod.dinheiro || 0)}</strong></div>
@@ -885,13 +965,15 @@ function openCashSession() {
   openDialog(
     t.openCashTitle,
     `
-      <div class="field">
-        <label>${t.openingFloat}</label>
-        <input id="openFloat" type="number" min="0" step="0.01" value="100" />
-      </div>
-      <div class="field">
-        <label>${t.note}</label>
-        <input id="openNote" placeholder="${t.optional}" />
+      <div class="form-stack">
+        <div class="field">
+          <label for="openFloat">${t.openingFloat}</label>
+          <input id="openFloat" class="control" type="number" min="0" step="0.01" value="100" />
+        </div>
+        <div class="field">
+          <label for="openNote">${t.note}</label>
+          <input id="openNote" class="control" placeholder="${t.optional}" />
+        </div>
       </div>
     `,
     async (body) => {
@@ -917,14 +999,16 @@ function closeCashSession() {
   openDialog(
     t.closeCashTitle,
     `
-      <p class="muted">${t.expectedCash(`<strong>${money(expected)}</strong>`)}</p>
-      <div class="field">
-        <label>${t.countedCash}</label>
-        <input id="closeCounted" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" />
-      </div>
-      <div class="field">
-        <label>${t.note}</label>
-        <input id="closeNote" placeholder="${t.optional}" />
+      <div class="form-stack">
+        <p class="field-hint">${t.expectedCash(`<strong>${money(expected)}</strong>`)}</p>
+        <div class="field">
+          <label for="closeCounted">${t.countedCash}</label>
+          <input id="closeCounted" class="control" type="number" min="0" step="0.01" value="${expected.toFixed(2)}" />
+        </div>
+        <div class="field">
+          <label for="closeNote">${t.note}</label>
+          <input id="closeNote" class="control" placeholder="${t.optional}" />
+        </div>
       </div>
     `,
     async (body) => {

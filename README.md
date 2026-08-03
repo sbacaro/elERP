@@ -18,7 +18,9 @@ Projeto: `https://jdkggegrreixywoyhkmb.supabase.co`
 2. Rode **`supabase/full_schema.sql`** — produtos, caixa, vendas, estoque, compras + RLS + Realtime
 3. Rode **`supabase/catalog_bebidas_br.sql`** — catálogo de ~420 bebidas BR (`product_catalog`)
 
-Após isso, o app lê e grava só no Supabase. Alterações no Dashboard refletem no site (Realtime), e o que você cadastra no site aparece nas tabelas.
+After isso, o app lê e grava só no Supabase. Alterações no Dashboard refletem no site (Realtime), e o que você cadastra no site aparece nas tabelas.
+
+Se a loja já existia **sem** a unidade `kg`, rode também `supabase/alter_unit_kg.sql` (ou rode de novo o final de `full_schema.sql`).
 
 > `supabase/schema.sql` é legado (`app_state` jsonb). Use só se precisar migrar dados antigos; o app novo usa as tabelas normalizadas.
 

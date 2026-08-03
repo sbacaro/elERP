@@ -20,8 +20,13 @@ function roundMoney(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
-function roundQty(n) {
-  return Math.round(Number(n) + Number.EPSILON);
+function roundQty(n, unit = "g") {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  if (unit === "kg" || unit === "un") {
+    return Math.round((x + Number.EPSILON) * 1000) / 1000;
+  }
+  return Math.round(x + Number.EPSILON);
 }
 
 function lineTotal(qty, unit, pricePerUnitOrKg) {
@@ -29,6 +34,12 @@ function lineTotal(qty, unit, pricePerUnitOrKg) {
   const p = Number(pricePerUnitOrKg) || 0;
   if (unit === "g") return roundMoney((q / 1000) * p);
   return roundMoney(q * p);
+}
+
+function normalizeUnit(unit) {
+  if (unit === "un") return "un";
+  if (unit === "kg") return "kg";
+  return "g";
 }
 
 function emptyState() {
@@ -314,14 +325,9 @@ const db = {
     const legacy = data.data;
     await this.withWrite(async () => {
       for (const p of legacy.products) {
-        let unit = p.unit === "un" ? "un" : "g";
-        let stock = Number(p.stock) || 0;
-        let minStock = Number(p.minStock) || 0;
-        if (p.unit === "kg") {
-          unit = "g";
-          stock = roundQty(stock * 1000);
-          minStock = roundQty(minStock * 1000);
-        }
+        const unit = normalizeUnit(p.unit);
+        const stock = roundQty(p.stock || 0, unit);
+        const minStock = roundQty(p.minStock || 0, unit);
         const { error: upErr } = await client.from("store_products").upsert({
           id: /^[0-9a-f-]{36}$/i.test(p.id) ? p.id : newId(),
           user_id: this.userId,
@@ -411,7 +417,7 @@ const db = {
     return this.withWrite(async () => {
       const client = sb();
       const id = input.id && /^[0-9a-f-]{36}$/i.test(input.id) ? input.id : newId();
-      const unit = input.unit === "un" ? "un" : "g";
+      const unit = normalizeUnit(input.unit);
       const payload = {
         id,
         user_id: this.userId,
@@ -419,8 +425,8 @@ const db = {
         unit,
         price: roundMoney(input.price),
         cost: roundMoney(input.cost || 0),
-        stock: roundQty(input.stock || 0),
-        min_stock: roundQty(input.minStock || 0),
+        stock: roundQty(input.stock || 0, unit),
+        min_stock: roundQty(input.minStock || 0, unit),
         active: input.active !== false,
         barcode: String(input.barcode || "").replace(/\D/g, "") || null,
         sku: String(input.sku || input.barcode || "").trim() || null,
@@ -456,7 +462,7 @@ const db = {
     return this.upsertProduct({
       id: existing?.id,
       name: item.name,
-      unit: item.unit === "g" ? "g" : "un",
+      unit: normalizeUnit(item.unit),
       price: item.suggested_price ?? item.price ?? 0,
       cost: item.suggested_cost ?? item.cost ?? 0,
       stock: existing ? existing.stock : stock,
@@ -549,14 +555,15 @@ const db = {
 
       const saleItems = cart.map((item) => {
         const product = this.state.products.find((p) => p.id === item.productId);
+        const unit = normalizeUnit(product.unit);
         return {
           productId: product.id,
           name: product.name,
-          unit: product.unit,
-          qty: roundQty(item.qty),
+          unit,
+          qty: roundQty(item.qty, unit),
           unitPrice: roundMoney(item.unitPrice),
           costSnapshot: product.cost,
-          lineTotal: lineTotal(item.qty, item.unit, item.unitPrice),
+          lineTotal: lineTotal(item.qty, unit, item.unitPrice),
         };
       });
       const total = roundMoney(saleItems.reduce((s, i) => s + i.lineTotal, 0));
@@ -603,7 +610,7 @@ const db = {
 
       for (const item of saleItems) {
         const product = this.state.products.find((p) => p.id === item.productId);
-        const nextStock = roundQty(product.stock - item.qty);
+        const nextStock = roundQty(product.stock - item.qty, item.unit);
         const { error: uErr } = await client
           .from("store_products")
           .update({ stock: nextStock })
@@ -648,7 +655,7 @@ const db = {
       for (const item of sale.items) {
         const product = this.state.products.find((p) => p.id === item.productId);
         if (!product) continue;
-        const nextStock = roundQty(product.stock + item.qty);
+        const nextStock = roundQty(product.stock + item.qty, item.unit || product.unit);
         await client
           .from("store_products")
           .update({ stock: nextStock })
@@ -696,7 +703,7 @@ const db = {
           product_id: product.id,
           name: product.name,
           unit: product.unit,
-          qty_ordered: roundQty(i.qty),
+          qty_ordered: roundQty(i.qty, product.unit),
           qty_received: 0,
           unit_cost: roundMoney(i.unitCost ?? product.cost),
         };
@@ -734,13 +741,14 @@ const db = {
       for (const rec of receipts) {
         const line = order.items.find((i) => i.productId === rec.productId);
         if (!line) continue;
-        const qty = roundQty(rec.qty || 0);
+        const unit = normalizeUnit(line.unit);
+        const qty = roundQty(rec.qty || 0, unit);
         if (qty <= 0) continue;
-        const remaining = roundQty(line.qtyOrdered - line.qtyReceived);
+        const remaining = roundQty(line.qtyOrdered - line.qtyReceived, unit);
         const apply = Math.min(qty, remaining);
         if (apply <= 0) continue;
         any = true;
-        const nextReceived = roundQty(line.qtyReceived + apply);
+        const nextReceived = roundQty(line.qtyReceived + apply, unit);
         await client
           .from("purchase_order_items")
           .update({ qty_received: nextReceived })
@@ -752,7 +760,7 @@ const db = {
           await client
             .from("store_products")
             .update({
-              stock: roundQty(product.stock + apply),
+              stock: roundQty(product.stock + apply, product.unit),
               cost: line.unitCost,
             })
             .eq("id", product.id)
@@ -830,12 +838,14 @@ const db = {
           };
         }
         byProduct[item.productId].qty = roundQty(
-          byProduct[item.productId].qty + item.qty
+          byProduct[item.productId].qty + item.qty,
+          item.unit
         );
         byProduct[item.productId].total = roundMoney(
           byProduct[item.productId].total + item.lineTotal
         );
         if (item.unit === "g") gramsSold += item.qty;
+        else if (item.unit === "kg") gramsSold += item.qty * 1000;
       }
     }
 
@@ -844,8 +854,8 @@ const db = {
       total: roundMoney(total),
       byMethod,
       byProduct: Object.values(byProduct).sort((a, b) => b.total - a.total),
-      gramsSold: roundQty(gramsSold),
-      kgSold: roundQty(gramsSold),
+      gramsSold: roundQty(gramsSold, "g"),
+      kgSold: roundQty(gramsSold / 1000, "kg"),
       sales,
     };
   },
@@ -862,11 +872,13 @@ function formatMoney(value) {
 function formatQty(value, unit) {
   const locale = window.elERPLocale?.LOCALE || "pt-BR";
   const n = Number(value || 0);
-  if (unit === "g" || unit === "kg") {
-    const grams = unit === "kg" ? Math.round(n * 1000) : Math.round(n);
-    return `${grams.toLocaleString(locale)} g`;
+  if (unit === "kg") {
+    return `${n.toLocaleString(locale, { maximumFractionDigits: 3 })} kg`;
   }
-  return `${n.toLocaleString(locale)} un`;
+  if (unit === "g") {
+    return `${Math.round(n).toLocaleString(locale)} g`;
+  }
+  return `${n.toLocaleString(locale, { maximumFractionDigits: 3 })} un`;
 }
 
 function formatDateTime(iso) {
