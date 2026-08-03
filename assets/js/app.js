@@ -21,12 +21,17 @@ function money(n) {
 }
 
 function applyStaticLabels() {
-  document.querySelector('.brand p').textContent = t.brandSubtitle;
-  document.getElementById("btnOpenCash").textContent = t.openCash;
-  document.getElementById("btnCloseCash").textContent = t.closeCash;
-  document.getElementById("btnOpenCashFromPos").textContent = t.openCashNow;
-  document.querySelector("#posGate h2").textContent = t.cashClosedTitle;
-  document.querySelector("#posGate .muted").textContent = t.cashClosedHelp;
+  const setText = (selector, value) => {
+    const el = document.querySelector(selector);
+    if (el) el.textContent = value;
+  };
+
+  setText(".brand p", t.brandSubtitle);
+  setText("#btnOpenCash", t.openCash);
+  setText("#btnCloseCash", t.closeCash);
+  setText("#btnOpenCashFromPos", t.openCashNow);
+  setText("#posGate h2", t.cashClosedTitle);
+  setText("#posGate .muted", t.cashClosedHelp);
 
   const navMap = {
     "panel-pos": t.nav.pos,
@@ -38,22 +43,25 @@ function applyStaticLabels() {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
   });
 
-  document.querySelector("#posWorkspace .card-head h2").textContent = t.flavorsAndItems;
-  document.getElementById("productSearch").placeholder = t.searchPlaceholder;
-  document.querySelector("#posWorkspace .card:last-child .card-head h2").textContent = t.cart;
-  document.getElementById("btnClearCart").textContent = t.clear;
-  document.querySelector(".cart-total span").textContent = t.total;
-  document.querySelector('label[for="payMethod"]').textContent = t.payment;
-  document.querySelector('label[for="payAmount"]').textContent = t.amountPaid;
-  document.getElementById("btnCheckout").textContent = t.finishSale;
+  setText("#labelFlavors", t.flavorsAndItems);
+  const search = document.getElementById("productSearch");
+  if (search) search.placeholder = t.searchPlaceholder;
+  setText("#labelCart", t.cart);
+  setText("#btnClearCart", t.clear);
+  setText(".cart-total span", t.total);
+  setText('label[for="payMethod"]', t.payment);
+  setText('label[for="payAmount"]', t.amountPaid);
+  setText("#btnCheckout", t.finishSale);
 
   const paySelect = document.getElementById("payMethod");
-  [...paySelect.options].forEach((opt) => {
-    opt.textContent = payMethodLabel(opt.value);
-  });
+  if (paySelect) {
+    [...paySelect.options].forEach((opt) => {
+      opt.textContent = payMethodLabel(opt.value);
+    });
+  }
 
-  document.querySelector("#panel-products .card-head h2").textContent = t.productsTitle;
-  document.getElementById("btnNewProduct").textContent = t.newProduct;
+  setText("#labelProducts", t.productsTitle);
+  setText("#btnNewProduct", t.newProduct);
   const productHeaders = document.querySelectorAll("#panel-products thead th");
   const productHeaderLabels = [
     t.colName,
@@ -68,9 +76,9 @@ function applyStaticLabels() {
     th.textContent = productHeaderLabels[i] ?? "";
   });
 
-  document.querySelector("#panel-purchases .card-head h2").textContent = t.purchasesTitle;
-  document.getElementById("btnNewPurchase").textContent = t.newPurchase;
-  document.querySelector("#panel-purchases .muted").textContent = t.purchasesHelp;
+  setText("#labelPurchases", t.purchasesTitle);
+  setText("#btnNewPurchase", t.newPurchase);
+  setText("#purchasesHelp", t.purchasesHelp);
   const purchaseHeaders = document.querySelectorAll("#panel-purchases thead th");
   const purchaseHeaderLabels = [
     t.colCreated,
@@ -84,11 +92,13 @@ function applyStaticLabels() {
     th.textContent = purchaseHeaderLabels[i] ?? "";
   });
 
-  document.querySelector("#dayOpenBox h2").textContent = t.dayTitle;
-  document.getElementById("btnResetDemo").textContent = t.resetDemo;
-  document.getElementById("dialogCancel").textContent = t.dialogCancel;
-  document.getElementById("dialogConfirm").textContent = t.dialogConfirm;
-  document.querySelector(".footer-note").childNodes[0].textContent = `${t.footerStorage} · `;
+  setText("#dayOpenBox h2", t.dayTitle);
+  setText("#btnResetDemo", t.resetDemo);
+  setText("#dialogCancel", t.dialogCancel);
+  setText("#dialogConfirm", t.dialogConfirm);
+
+  const footerText = document.getElementById("footerStorageText");
+  if (footerText) footerText.textContent = `${t.footerStorage} · `;
 }
 
 function switchPanel(id) {
