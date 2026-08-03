@@ -32,6 +32,7 @@ const t = {
     purchases: "Compras",
     day: "Dia",
     scale: "Balança",
+    catalog: "Catálogo",
   },
 
   sessionOpen: (floatLabel) => `Caixa aberto · fundo ${floatLabel}`,
@@ -174,6 +175,21 @@ const t = {
   scaleHintBarcode: "Se a balança imprime etiqueta com código, leia com o scanner neste diálogo (peso em g).",
   scaleError: "Erro na balança",
   scalePermissionDenied: "Permissão da porta USB negada ou cancelada.",
+
+  catalogTitle: "Catálogo de bebidas (códigos de barras)",
+  catalogHelp:
+    "Base Brasil (Open Food Facts + itens curados): águas, refrigerantes, sucos, chás e energéticos. Busque e importe para a sua loja.",
+  catalogSearch: "Buscar nome ou código de barras",
+  catalogGroup: "Categoria",
+  catalogAll: "Todas",
+  catalogImport: "Importar",
+  catalogImported: "Produto importado para a loja",
+  catalogEmpty: "Nenhum item encontrado.",
+  catalogCount: (n, source) => `${n} itens · fonte: ${source}`,
+  catalogLoadError: "Não foi possível carregar o catálogo.",
+  catalogBarcode: "Código",
+  catalogPriceHint: "Preço sugerido",
+  posBarcodeHint: "Escaneie ou digite um código de barras e pressione Enter",
 
   dialogCancel: "Cancelar",
   dialogConfirm: "Confirmar",

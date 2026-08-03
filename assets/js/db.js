@@ -226,6 +226,34 @@ const db = {
     this.state = createSeedState();
   },
 
+  findByBarcode(code) {
+    const digits = String(code || "").replace(/\D/g, "");
+    if (!digits) return null;
+    return (
+      this.state.products.find(
+        (p) => p.active !== false && (p.barcode === digits || p.sku === digits)
+      ) || null
+    );
+  },
+
+  importCatalogItem(item, { stock = 0 } = {}) {
+    if (!item?.name) throw new Error(err("invalidProductName"));
+    const barcode = String(item.barcode || "").replace(/\D/g, "");
+    const existing = barcode ? this.findByBarcode(barcode) : null;
+    return this.upsertProduct({
+      id: existing?.id,
+      name: item.name,
+      unit: item.unit === "g" ? "g" : "un",
+      price: item.suggested_price ?? item.price ?? 0,
+      cost: item.suggested_cost ?? item.cost ?? 0,
+      stock: existing ? existing.stock : stock,
+      minStock: existing?.minStock ?? (item.unit === "g" ? 1000 : 5),
+      active: true,
+      barcode,
+      sku: item.sku || barcode,
+    });
+  },
+
   getOpenSession() {
     return this.state.sessions.find((s) => s.status === "open") || null;
   },
@@ -291,6 +319,8 @@ const db = {
       stock: Number(input.stock || 0),
       minStock: Number(input.minStock || 0),
       active: input.active !== false,
+      barcode: String(input.barcode || "").replace(/\D/g, "") || null,
+      sku: String(input.sku || input.barcode || "").trim() || null,
     };
     if (!payload.name) throw new Error(err("invalidProductName"));
     if (payload.price < 0) throw new Error(err("invalidPrice"));

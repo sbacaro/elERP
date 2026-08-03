@@ -65,6 +65,7 @@
         <button type="button" data-panel="panel-purchases">Compras</button>
         <button type="button" data-panel="panel-day">Dia</button>
         <button type="button" data-panel="panel-scale">Balança</button>
+        <button type="button" data-panel="panel-catalog">Catálogo</button>
       </nav>
 
       <main>
@@ -86,6 +87,13 @@
                     id="productSearch"
                     type="search"
                     placeholder="Buscar..."
+                    style="flex: 1; min-width: 160px; border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.8rem; background: #fff"
+                  />
+                  <input
+                    id="posBarcode"
+                    type="text"
+                    inputmode="numeric"
+                    placeholder="Código de barras + Enter"
                     style="flex: 1; min-width: 160px; border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.8rem; background: #fff"
                   />
                 </div>
@@ -215,7 +223,41 @@
                 <strong id="scaleLastText">—</strong>
               </div>
             </div>
-            <p class="muted" id="scaleRawText" style="font-family: ui-monospace, monospace; font-size: 0.85rem"></p>
+            <p id="scaleRawText" class="muted" style="font-family: ui-monospace, monospace; font-size: 0.85rem"></p>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-catalog">
+          <div class="card">
+            <div class="card-head">
+              <h2 id="labelCatalog">Catálogo de bebidas</h2>
+            </div>
+            <p class="muted" id="catalogHelp"></p>
+            <p class="muted" id="catalogMeta"></p>
+            <div class="toolbar">
+              <input
+                id="catalogSearch"
+                type="search"
+                placeholder="Buscar nome ou código..."
+                style="flex: 1; min-width: 180px; border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.8rem; background: #fff"
+              />
+              <select id="catalogGroup" style="border: 1px solid var(--line); border-radius: 12px; padding: 0.65rem 0.8rem; background: #fff"></select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Nome</th>
+                    <th>Categoria</th>
+                    <th>Qtd</th>
+                    <th>Preço sug.</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="catalogBody"></tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>
@@ -246,6 +288,7 @@
     <script src="./assets/js/db.js"></script>
     <script src="./assets/js/scale-protocols.js"></script>
     <script src="./assets/js/scale.js"></script>
+    <script src="./assets/js/catalog.js"></script>
     <script src="./assets/js/app.js"></script>
   </body>
 </html>

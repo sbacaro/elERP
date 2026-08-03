@@ -2,6 +2,7 @@
 const { db, roundMoney, roundQty, lineTotal, formatMoney, formatQty, formatDateTime } = window.elERP;
 const { t, payMethodLabel, poStatusLabel } = window.elERPLocale;
 const scale = window.elERPScale;
+const catalog = window.elERPCatalog;
 
 const ui = {
   toastEl: document.getElementById("toast"),
@@ -54,6 +55,7 @@ function applyStaticLabels() {
     "panel-purchases": t.nav.purchases,
     "panel-day": t.nav.day,
     "panel-scale": t.nav.scale,
+    "panel-catalog": t.nav.catalog,
   };
   ui.navButtons.forEach((btn) => {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
@@ -128,12 +130,19 @@ function applyStaticLabels() {
   setText("#btnScaleDisconnect", t.scaleDisconnect);
   setText("#btnScaleSave", t.scaleSave);
   setText("#labelScaleLast", t.scaleLast);
+  setText("#labelCatalog", t.catalogTitle);
+  setText("#catalogHelp", t.catalogHelp);
+  const catalogSearch = document.getElementById("catalogSearch");
+  if (catalogSearch) catalogSearch.placeholder = t.catalogSearch;
+  const posBarcode = document.getElementById("posBarcode");
+  if (posBarcode) posBarcode.placeholder = t.posBarcodeHint;
 
   const footerText = document.getElementById("footerStorageText");
   if (footerText) footerText.textContent = `${t.footerStorage} · `;
 
   fillScaleSelects();
   renderScaleStatus();
+  fillCatalogGroups();
 }
 
 function switchPanel(id) {
@@ -146,6 +155,7 @@ function switchPanel(id) {
   if (id === "panel-purchases") renderPurchases();
   if (id === "panel-day") renderDay();
   if (id === "panel-scale") renderScaleStatus();
+  if (id === "panel-catalog") renderCatalog();
 }
 
 function refreshSessionPill() {
@@ -496,6 +506,82 @@ function renderProducts() {
     .join("");
 }
 
+function fillCatalogGroups() {
+  const sel = document.getElementById("catalogGroup");
+  if (!sel || !catalog) return;
+  const groups = ["", "agua", "refrigerante", "suco", "cha", "energetico", "bebida"];
+  sel.innerHTML = groups
+    .map((g) => {
+      const label = g ? catalog.groupLabel(g) : t.catalogAll;
+      return `<option value="${g}">${label}</option>`;
+    })
+    .join("");
+}
+
+async function ensureCatalog() {
+  if (!catalog) return;
+  if (catalog.loaded) return;
+  try {
+    await catalog.load();
+  } catch {
+    toast(t.catalogLoadError, true);
+  }
+}
+
+async function renderCatalog() {
+  const body = document.getElementById("catalogBody");
+  const meta = document.getElementById("catalogMeta");
+  if (!body) return;
+  await ensureCatalog();
+  if (!catalog?.loaded) {
+    body.innerHTML = `<tr><td colspan="6" class="empty">${t.catalogLoadError}</td></tr>`;
+    return;
+  }
+  const q = document.getElementById("catalogSearch")?.value || "";
+  const group = document.getElementById("catalogGroup")?.value || "";
+  const rows = catalog.search({ q, group, limit: 100 });
+  if (meta) {
+    meta.textContent = t.catalogCount(catalog.items.length, catalog.source || "—");
+  }
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="6" class="empty">${t.catalogEmpty}</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows
+    .map(
+      (p) => `
+      <tr>
+        <td><code>${escapeHtml(p.barcode)}</code></td>
+        <td><strong>${escapeHtml(p.name)}</strong>${p.brand ? `<div class="muted">${escapeHtml(p.brand)}</div>` : ""}</td>
+        <td><span class="badge">${escapeHtml(catalog.groupLabel(p.group))}</span></td>
+        <td>${escapeHtml(p.quantity || "—")}</td>
+        <td>${money(p.suggested_price)}</td>
+        <td><button type="button" class="btn btn-sm" data-import-barcode="${escapeAttr(p.barcode)}">${t.catalogImport}</button></td>
+      </tr>`
+    )
+    .join("");
+}
+
+async function handlePosBarcode(code) {
+  const digits = String(code || "").replace(/\D/g, "");
+  if (!digits) return;
+  let product = db.findByBarcode(digits);
+  if (!product) {
+    await ensureCatalog();
+    const item = catalog?.findByBarcode(digits);
+    if (item) {
+      product = db.importCatalogItem(item, { stock: 20 });
+      toast(t.catalogImported);
+    }
+  }
+  if (!product) {
+    toast(t.catalogEmpty, true);
+    return;
+  }
+  addProductToCart(product.id);
+  renderProducts();
+}
+
 function openProductForm(product = null) {
   openDialog(
     product ? t.editProduct : t.newProduct,
@@ -503,6 +589,16 @@ function openProductForm(product = null) {
       <div class="field">
         <label>${t.colName}</label>
         <input id="pName" value="${escapeAttr(product?.name || "")}" />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>${t.catalogBarcode}</label>
+          <input id="pBarcode" inputmode="numeric" value="${escapeAttr(product?.barcode || "")}" />
+        </div>
+        <div class="field">
+          <label>SKU</label>
+          <input id="pSku" value="${escapeAttr(product?.sku || product?.barcode || "")}" />
+        </div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -545,6 +641,8 @@ function openProductForm(product = null) {
       db.upsertProduct({
         id: product?.id,
         name: body.querySelector("#pName").value,
+        barcode: body.querySelector("#pBarcode").value,
+        sku: body.querySelector("#pSku").value,
         unit: body.querySelector("#pUnit").value,
         price: body.querySelector("#pPrice").value,
         cost: body.querySelector("#pCost").value,
@@ -858,6 +956,30 @@ function bindEvents() {
   document.getElementById("btnOpenCashFromPos").addEventListener("click", openCashSession);
   document.getElementById("btnCloseCash").addEventListener("click", closeCashSession);
   document.getElementById("productSearch").addEventListener("input", renderPos);
+  document.getElementById("posBarcode")?.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const input = e.currentTarget;
+    const code = input.value;
+    input.value = "";
+    await handlePosBarcode(code);
+  });
+  document.getElementById("catalogSearch")?.addEventListener("input", () => renderCatalog());
+  document.getElementById("catalogGroup")?.addEventListener("change", () => renderCatalog());
+  document.getElementById("catalogBody")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-import-barcode]");
+    if (!btn) return;
+    try {
+      const item = catalog.findByBarcode(btn.dataset.importBarcode);
+      if (!item) throw new Error(t.catalogEmpty);
+      db.importCatalogItem(item, { stock: 20 });
+      toast(t.catalogImported);
+      renderProducts();
+      renderPos();
+    } catch (err) {
+      toast(err.message || String(err), true);
+    }
+  });
   document.getElementById("btnCheckout").addEventListener("click", checkout);
   document.getElementById("btnClearCart").addEventListener("click", () => {
     db.clearCart();
@@ -1033,6 +1155,7 @@ async function enterApp(user) {
     setAppVisible(true);
     setLoginMessage("");
     refreshSessionPill();
+    ensureCatalog();
     switchPanel("panel-pos");
   } catch (error) {
     setAppVisible(false);
