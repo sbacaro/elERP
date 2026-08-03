@@ -42,13 +42,13 @@
       </div>
     </section>
 
-    <div class="app" id="appShell" hidden>
+    <div class="app is-hidden" id="appShell" hidden>
       <header class="topbar">
         <div class="brand">
           <h1>elERP</h1>
           <p>PDV para sorvete por quilo · estoque · caixa · compras</p>
         </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center">
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center" class="topbar-actions">
           <span class="session-pill" id="userEmailLabel" title="Conta logada"></span>
           <div class="session-pill" id="sessionPill" data-open="false">
             <span class="dot"></span> Caixa fechado
@@ -200,7 +200,7 @@
     <div class="toast" id="toast" role="status"></div>
 
     <script src="./assets/js/config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script src="./assets/js/supabase-client.js"></script>
     <script src="./assets/js/i18n.js"></script>
     <script src="./assets/js/db.js"></script>

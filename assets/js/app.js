@@ -9,6 +9,7 @@ const ui = {
 };
 
 function toast(message, isError = false) {
+  if (!ui.toastEl) return;
   ui.toastEl.textContent = message;
   ui.toastEl.classList.toggle("error", isError);
   ui.toastEl.classList.add("show");
@@ -20,13 +21,25 @@ function money(n) {
   return formatMoney(n);
 }
 
+function setHidden(el, hide) {
+  if (!el) return;
+  el.hidden = hide;
+  el.classList.toggle("is-hidden", hide);
+}
+
+function setAppVisible(loggedIn) {
+  setHidden(document.getElementById("loginScreen"), loggedIn);
+  setHidden(document.getElementById("appShell"), !loggedIn);
+  document.body.classList.toggle("is-logged-in", loggedIn);
+}
+
 function applyStaticLabels() {
   const setText = (selector, value) => {
     const el = document.querySelector(selector);
     if (el) el.textContent = value;
   };
 
-  setText(".brand p", t.brandSubtitle);
+  setText("#appShell .brand p", t.brandSubtitle);
   setText("#btnOpenCash", t.openCash);
   setText("#btnCloseCash", t.closeCash);
   setText("#btnOpenCashFromPos", t.openCashNow);
@@ -753,19 +766,26 @@ function bindEvents() {
 
 function init() {
   document.documentElement.lang = "pt-BR";
-  applyStaticLabels();
-  bindEvents();
-  bindAuth();
-  bootAuth();
-}
-
-function setAppVisible(loggedIn) {
-  document.getElementById("loginScreen").hidden = loggedIn;
-  document.getElementById("appShell").hidden = !loggedIn;
+  try {
+    applyStaticLabels();
+    bindEvents();
+    bindAuth();
+    setAppVisible(false);
+    bootAuth();
+  } catch (error) {
+    console.error(error);
+    const msg = document.getElementById("loginMessage");
+    if (msg) {
+      msg.textContent = "Erro ao iniciar a interface. Atualize a página.";
+      msg.classList.add("error");
+    }
+    setAppVisible(false);
+  }
 }
 
 function setLoginMessage(msg, isError = false) {
   const el = document.getElementById("loginMessage");
+  if (!el) return;
   el.textContent = msg || "";
   el.classList.toggle("error", Boolean(isError && msg));
 }

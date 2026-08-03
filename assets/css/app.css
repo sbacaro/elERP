@@ -158,6 +158,11 @@ button {
   display: block;
 }
 
+/* Garante que só um painel aparece, mesmo se faltar a classe active */
+main > .panel:not(.active) {
+  display: none !important;
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -553,6 +558,12 @@ th {
   font-size: 0.85rem;
 }
 
+/* Importante: author CSS não pode sobrescrever [hidden] */
+[hidden],
+.is-hidden {
+  display: none !important;
+}
+
 .login-screen {
   min-height: 100vh;
   display: grid;
@@ -570,6 +581,12 @@ th {
   gap: 0.55rem;
 }
 
+@media (max-width: 480px) {
+  .login-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .login-message {
   min-height: 1.25rem;
   margin: 0 0 0.75rem;
@@ -582,8 +599,16 @@ th {
 }
 
 #userEmailLabel {
-  max-width: 220px;
+  max-width: min(220px, 40vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
 }
