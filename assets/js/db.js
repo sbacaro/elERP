@@ -1,15 +1,5 @@
 (function () {
-const STORAGE_KEY = "elERP.v1";
-
-const SEED_PRODUCTS = [
-  { name: "Chocolate belga", unit: "g", price: 89.9, cost: 32, stock: 12000, minStock: 3000 },
-  { name: "Morango", unit: "g", price: 84.9, cost: 28, stock: 10000, minStock: 3000 },
-  { name: "Napolitano", unit: "g", price: 79.9, cost: 26, stock: 14000, minStock: 3000 },
-  { name: "Pistache", unit: "g", price: 109.9, cost: 48, stock: 6000, minStock: 2000 },
-  { name: "Coco", unit: "g", price: 82.9, cost: 27, stock: 8000, minStock: 2000 },
-  { name: "Pote 500 ml", unit: "un", price: 2.5, cost: 0.8, stock: 120, minStock: 30 },
-  { name: "Colher", unit: "un", price: 0.5, cost: 0.1, stock: 200, minStock: 50 },
-];
+const STORAGE_KEY = "elERP.v2.local";
 
 const err = (key, ...args) => {
   const catalog = window.elERPLocale?.t?.errors || {};
@@ -18,8 +8,8 @@ const err = (key, ...args) => {
   return value || key;
 };
 
-function uid(prefix = "id") {
-  return `${prefix}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`;
+function newId() {
+  return crypto.randomUUID();
 }
 
 function todayISO() {
@@ -30,14 +20,10 @@ function roundMoney(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
-function roundQty(n, unit) {
-  // peso sempre em gramas inteiras; unidades sem decimal
-  const decimals = 0;
-  const f = 10 ** decimals;
-  return Math.round((Number(n) + Number.EPSILON) * f) / f;
+function roundQty(n) {
+  return Math.round(Number(n) + Number.EPSILON);
 }
 
-/** Preço cadastrado de produtos "g" é sempre R$/kg. */
 function lineTotal(qty, unit, pricePerUnitOrKg) {
   const q = Number(qty) || 0;
   const p = Number(pricePerUnitOrKg) || 0;
@@ -45,185 +31,370 @@ function lineTotal(qty, unit, pricePerUnitOrKg) {
   return roundMoney(q * p);
 }
 
-function normalizeWeightState(state) {
-  if (!state || typeof state !== "object") return state;
-  for (const p of state.products || []) {
-    if (p.unit === "kg") {
-      p.unit = "g";
-      p.stock = roundQty((Number(p.stock) || 0) * 1000, "g");
-      p.minStock = roundQty((Number(p.minStock) || 0) * 1000, "g");
-    }
-  }
-  for (const item of state.cart || []) {
-    if (item.unit === "kg") {
-      item.unit = "g";
-      item.qty = roundQty((Number(item.qty) || 0) * 1000, "g");
-    }
-  }
-  for (const sale of state.sales || []) {
-    for (const item of sale.items || []) {
-      if (item.unit === "kg") {
-        item.unit = "g";
-        item.qty = roundQty((Number(item.qty) || 0) * 1000, "g");
-      }
-    }
-  }
-  for (const order of state.purchaseOrders || []) {
-    for (const item of order.items || []) {
-      if (item.unit === "kg") {
-        item.unit = "g";
-        item.qtyOrdered = roundQty((Number(item.qtyOrdered) || 0) * 1000, "g");
-        item.qtyReceived = roundQty((Number(item.qtyReceived) || 0) * 1000, "g");
-      }
-    }
-  }
-  return state;
-}
-
-function createSeedState() {
-  const products = SEED_PRODUCTS.map((p) => ({
-    id: uid("prod"),
-    active: true,
-    ...p,
-  }));
+function emptyState() {
   return {
-    products,
+    products: [],
     sessions: [],
     sales: [],
     stockMovements: [],
-    suppliers: [
-      { id: uid("sup"), name: "Distribuidora Gelato Norte", phone: "" },
-      { id: uid("sup"), name: "Embalagens Doce Casa", phone: "" },
-    ],
+    suppliers: [],
     purchaseOrders: [],
     cart: [],
   };
 }
 
-function cloneState(state) {
-  return JSON.parse(JSON.stringify(state));
+function mapProduct(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    unit: row.unit,
+    price: Number(row.price) || 0,
+    cost: Number(row.cost) || 0,
+    stock: Number(row.stock) || 0,
+    minStock: Number(row.min_stock) || 0,
+    active: row.active !== false,
+    barcode: row.barcode || null,
+    sku: row.sku || null,
+  };
+}
+
+function sb() {
+  return window.elERPSb;
+}
+
+function throwSb(error, fallbackKey) {
+  if (!error) return;
+  const msg = `${error.message || ""} ${error.code || ""} ${error.details || ""}`;
+  if (/relation .* does not exist|Could not find the table|schema cache/i.test(msg)) {
+    const e = new Error("SCHEMA_MISSING");
+    e.cause = error;
+    throw e;
+  }
+  throw new Error(error.message || fallbackKey || "Supabase error");
 }
 
 const db = {
-  state: createSeedState(),
+  state: emptyState(),
   userId: null,
   ready: false,
-  _saveTimer: null,
   onSync: null,
+  onChange: null,
+  _channel: null,
+  _reloadTimer: null,
+  _suppressRealtime: false,
 
-  localKey() {
-    return this.userId ? `${STORAGE_KEY}.${this.userId}` : STORAGE_KEY;
+  notify() {
+    if (typeof this.onChange === "function") this.onChange(this.state);
+  },
+
+  localCartKey() {
+    return `${STORAGE_KEY}.cart.${this.userId || "anon"}`;
+  },
+
+  readLocalCart() {
+    try {
+      return JSON.parse(localStorage.getItem(this.localCartKey()) || "[]");
+    } catch {
+      return [];
+    }
+  },
+
+  writeLocalCart() {
+    localStorage.setItem(this.localCartKey(), JSON.stringify(this.state.cart || []));
   },
 
   async bootstrap(userId) {
     this.userId = userId;
     this.ready = false;
-
-    let loaded = null;
-    try {
-      loaded = await this.loadFromCloud();
-    } catch (error) {
-      const local = this.readLocal();
-      if (local) {
-        this.state = local;
-        this.ready = true;
-        throw error;
-      }
-      throw error;
-    }
-
-    if (loaded && typeof loaded === "object") {
-      this.state = normalizeWeightState({
-        products: loaded.products || [],
-        sessions: loaded.sessions || [],
-        sales: loaded.sales || [],
-        stockMovements: loaded.stockMovements || [],
-        suppliers: loaded.suppliers || [],
-        purchaseOrders: loaded.purchaseOrders || [],
-        cart: loaded.cart || [],
-      });
-    } else {
-      const local = this.readLocal();
-      this.state = normalizeWeightState(local || createSeedState());
-      await this.saveToCloud();
-    }
-
-    this.writeLocal();
+    await this.reload();
+    await this.maybeMigrateLegacyAppState();
+    await this.reload();
+    this.subscribeRealtime();
     this.ready = true;
+    this.notify();
   },
 
-  readLocal() {
+  async reload() {
+    const client = sb();
+    if (!client || !this.userId) throw new Error("NO_SESSION");
+
+    const uid = this.userId;
+    const [
+      productsRes,
+      suppliersRes,
+      sessionsRes,
+      salesRes,
+      movementsRes,
+      ordersRes,
+    ] = await Promise.all([
+      client.from("store_products").select("*").eq("user_id", uid).order("name"),
+      client.from("store_suppliers").select("*").eq("user_id", uid).order("name"),
+      client.from("cash_sessions").select("*").eq("user_id", uid).order("opened_at", { ascending: false }),
+      client.from("sales").select("*").eq("user_id", uid).order("sold_at", { ascending: false }).limit(500),
+      client.from("stock_movements").select("*").eq("user_id", uid).order("at", { ascending: false }).limit(500),
+      client.from("purchase_orders").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
+    ]);
+
+    for (const res of [productsRes, suppliersRes, sessionsRes, salesRes, movementsRes, ordersRes]) {
+      throwSb(res.error);
+    }
+
+    const sales = salesRes.data || [];
+    const saleIds = sales.map((s) => s.id);
+    let items = [];
+    let payments = [];
+    if (saleIds.length) {
+      const [itemsRes, payRes] = await Promise.all([
+        client.from("sale_items").select("*").in("sale_id", saleIds),
+        client.from("sale_payments").select("*").in("sale_id", saleIds),
+      ]);
+      throwSb(itemsRes.error);
+      throwSb(payRes.error);
+      items = itemsRes.data || [];
+      payments = payRes.data || [];
+    }
+
+    const orderIds = (ordersRes.data || []).map((o) => o.id);
+    let orderItems = [];
+    if (orderIds.length) {
+      const oiRes = await client.from("purchase_order_items").select("*").in("order_id", orderIds);
+      throwSb(oiRes.error);
+      orderItems = oiRes.data || [];
+    }
+
+    this.state = {
+      products: (productsRes.data || []).map(mapProduct),
+      suppliers: (suppliersRes.data || []).map((s) => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone || "",
+      })),
+      sessions: (sessionsRes.data || []).map((s) => ({
+        id: s.id,
+        status: s.status,
+        openedAt: s.opened_at,
+        closedAt: s.closed_at,
+        openingFloat: Number(s.opening_float) || 0,
+        countedCash: s.counted_cash == null ? null : Number(s.counted_cash),
+        expectedCash: s.expected_cash == null ? null : Number(s.expected_cash),
+        difference: s.difference == null ? null : Number(s.difference),
+        note: s.note || "",
+        closeNote: s.close_note || "",
+      })),
+      sales: sales.map((s) => ({
+        id: s.id,
+        sessionId: s.session_id,
+        status: s.status,
+        fiscalStatus: s.fiscal_status || "none",
+        total: Number(s.total) || 0,
+        note: s.note || "",
+        soldAt: s.sold_at,
+        items: items
+          .filter((i) => i.sale_id === s.id)
+          .map((i) => ({
+            productId: i.product_id,
+            name: i.name,
+            unit: i.unit,
+            qty: Number(i.qty) || 0,
+            unitPrice: Number(i.unit_price) || 0,
+            costSnapshot: Number(i.cost_snapshot) || 0,
+            lineTotal: Number(i.line_total) || 0,
+          })),
+        payments: payments
+          .filter((p) => p.sale_id === s.id)
+          .map((p) => ({ method: p.method, amount: Number(p.amount) || 0 })),
+      })),
+      stockMovements: (movementsRes.data || []).map((m) => ({
+        id: m.id,
+        productId: m.product_id,
+        qtyDelta: Number(m.qty_delta) || 0,
+        type: m.type,
+        refId: m.ref_id,
+        note: m.note || "",
+        at: m.at,
+      })),
+      purchaseOrders: (ordersRes.data || []).map((o) => ({
+        id: o.id,
+        supplierId: o.supplier_id,
+        supplierName: o.supplier_name,
+        status: o.status,
+        note: o.note || "",
+        createdAt: o.created_at,
+        receivedAt: o.received_at,
+        items: orderItems
+          .filter((i) => i.order_id === o.id)
+          .map((i) => ({
+            productId: i.product_id,
+            name: i.name,
+            unit: i.unit,
+            qtyOrdered: Number(i.qty_ordered) || 0,
+            qtyReceived: Number(i.qty_received) || 0,
+            unitCost: Number(i.unit_cost) || 0,
+          })),
+      })),
+      cart: this.readLocalCart(),
+    };
+
+    this.notify();
+    return this.state;
+  },
+
+  scheduleReload() {
+    if (this._suppressRealtime) return;
+    clearTimeout(this._reloadTimer);
+    this._reloadTimer = setTimeout(async () => {
+      try {
+        if (typeof this.onSync === "function") this.onSync("saving");
+        await this.reload();
+        if (typeof this.onSync === "function") this.onSync("saved");
+      } catch (e) {
+        if (typeof this.onSync === "function") this.onSync("error", e);
+      }
+    }, 250);
+  },
+
+  subscribeRealtime() {
+    const client = sb();
+    if (!client || !this.userId) return;
+    if (this._channel) {
+      client.removeChannel(this._channel);
+      this._channel = null;
+    }
+    const tables = [
+      "store_products",
+      "store_suppliers",
+      "cash_sessions",
+      "sales",
+      "sale_items",
+      "sale_payments",
+      "stock_movements",
+      "purchase_orders",
+      "purchase_order_items",
+    ];
+    let channel = client.channel(`elerp-${this.userId}`);
+    for (const table of tables) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table },
+        () => this.scheduleReload()
+      );
+    }
+    this._channel = channel.subscribe();
+  },
+
+  async withWrite(fn) {
+    this._suppressRealtime = true;
     try {
-      const raw = localStorage.getItem(this.localKey());
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
+      if (typeof this.onSync === "function") this.onSync("saving");
+      const result = await fn();
+      await this.reload();
+      if (typeof this.onSync === "function") this.onSync("saved");
+      return result;
+    } catch (e) {
+      if (typeof this.onSync === "function") this.onSync("error", e);
+      throw e;
+    } finally {
+      this._suppressRealtime = false;
     }
   },
 
-  writeLocal() {
-    localStorage.setItem(this.localKey(), JSON.stringify(this.state));
-  },
+  /** Migra blob legado app_state.products → store_products uma vez */
+  async maybeMigrateLegacyAppState() {
+    const client = sb();
+    if (!client || !this.userId) return;
+    if ((this.state.products || []).length) return;
 
-  async loadFromCloud() {
-    const sb = window.elERPSb;
-    if (!sb || !this.userId) return null;
-    const { data, error } = await sb
+    const { data, error } = await client
       .from("app_state")
       .select("data")
       .eq("user_id", this.userId)
       .maybeSingle();
+    if (error || !data?.data?.products?.length) return;
 
-    if (error) {
-      const msg = `${error.message || ""} ${error.code || ""} ${error.details || ""}`;
-      if (/relation .* does not exist|Could not find the table|schema cache/i.test(msg)) {
-        const e = new Error("SCHEMA_MISSING");
-        e.cause = error;
-        throw e;
+    const legacy = data.data;
+    await this.withWrite(async () => {
+      for (const p of legacy.products) {
+        let unit = p.unit === "un" ? "un" : "g";
+        let stock = Number(p.stock) || 0;
+        let minStock = Number(p.minStock) || 0;
+        if (p.unit === "kg") {
+          unit = "g";
+          stock = roundQty(stock * 1000);
+          minStock = roundQty(minStock * 1000);
+        }
+        const { error: upErr } = await client.from("store_products").upsert({
+          id: /^[0-9a-f-]{36}$/i.test(p.id) ? p.id : newId(),
+          user_id: this.userId,
+          name: p.name,
+          unit,
+          price: Number(p.price) || 0,
+          cost: Number(p.cost) || 0,
+          stock,
+          min_stock: minStock,
+          active: p.active !== false,
+          barcode: p.barcode || null,
+          sku: p.sku || null,
+        });
+        throwSb(upErr);
       }
-      throw error;
-    }
-    return data?.data ?? null;
-  },
-
-  async saveToCloud() {
-    const sb = window.elERPSb;
-    if (!sb || !this.userId) return { ok: false };
-    if (typeof this.onSync === "function") this.onSync("saving");
-    const { error } = await sb.from("app_state").upsert(
-      {
-        user_id: this.userId,
-        data: cloneState(this.state),
-      },
-      { onConflict: "user_id" }
-    );
-    if (error) {
-      if (typeof this.onSync === "function") this.onSync("error", error);
-      return { ok: false, error };
-    }
-    if (typeof this.onSync === "function") this.onSync("saved");
-    return { ok: true };
-  },
-
-  persist() {
-    if (!this.userId) return;
-    this.writeLocal();
-    clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(() => {
-      this.saveToCloud();
-    }, 450);
-  },
-
-  async reset() {
-    this.state = createSeedState();
-    this.writeLocal();
-    await this.saveToCloud();
+      for (const s of legacy.suppliers || []) {
+        const { error: sErr } = await client.from("store_suppliers").upsert({
+          id: /^[0-9a-f-]{36}$/i.test(s.id) ? s.id : newId(),
+          user_id: this.userId,
+          name: s.name,
+          phone: s.phone || "",
+        });
+        throwSb(sErr);
+      }
+      // limpa products do blob para não reimportar
+      const next = { ...legacy, products: [], suppliers: [] };
+      await client.from("app_state").upsert({ user_id: this.userId, data: next });
+    });
   },
 
   clearSession() {
+    if (this._channel && sb()) sb().removeChannel(this._channel);
+    this._channel = null;
     this.userId = null;
     this.ready = false;
-    this.state = createSeedState();
+    this.state = emptyState();
+  },
+
+  async reset() {
+    return this.withWrite(async () => {
+      const client = sb();
+      const uid = this.userId;
+      // ordem por FKs
+      const sales = (await client.from("sales").select("id").eq("user_id", uid)).data || [];
+      const saleIds = sales.map((s) => s.id);
+      if (saleIds.length) {
+        await client.from("sale_payments").delete().in("sale_id", saleIds);
+        await client.from("sale_items").delete().in("sale_id", saleIds);
+      }
+      await client.from("sales").delete().eq("user_id", uid);
+      const orders = (await client.from("purchase_orders").select("id").eq("user_id", uid)).data || [];
+      const orderIds = orders.map((o) => o.id);
+      if (orderIds.length) await client.from("purchase_order_items").delete().in("order_id", orderIds);
+      await client.from("purchase_orders").delete().eq("user_id", uid);
+      await client.from("stock_movements").delete().eq("user_id", uid);
+      await client.from("cash_sessions").delete().eq("user_id", uid);
+      await client.from("store_cart_items").delete().eq("user_id", uid);
+      await client.from("store_products").delete().eq("user_id", uid);
+      await client.from("store_suppliers").delete().eq("user_id", uid);
+      this.state.cart = [];
+      this.writeLocalCart();
+    });
+  },
+
+  getOpenSession() {
+    return this.state.sessions.find((s) => s.status === "open") || null;
+  },
+
+  listProducts({ onlyActive = true } = {}) {
+    return this.state.products
+      .filter((p) => (onlyActive ? p.active : true))
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   },
 
   findByBarcode(code) {
@@ -236,7 +407,49 @@ const db = {
     );
   },
 
-  importCatalogItem(item, { stock = 0 } = {}) {
+  async upsertProduct(input) {
+    return this.withWrite(async () => {
+      const client = sb();
+      const id = input.id && /^[0-9a-f-]{36}$/i.test(input.id) ? input.id : newId();
+      const unit = input.unit === "un" ? "un" : "g";
+      const payload = {
+        id,
+        user_id: this.userId,
+        name: String(input.name || "").trim(),
+        unit,
+        price: roundMoney(input.price),
+        cost: roundMoney(input.cost || 0),
+        stock: roundQty(input.stock || 0),
+        min_stock: roundQty(input.minStock || 0),
+        active: input.active !== false,
+        barcode: String(input.barcode || "").replace(/\D/g, "") || null,
+        sku: String(input.sku || input.barcode || "").trim() || null,
+      };
+      if (!payload.name) throw new Error(err("invalidProductName"));
+      if (payload.price < 0) throw new Error(err("invalidPrice"));
+
+      const prev = this.state.products.find((p) => p.id === id);
+      const { error } = await client.from("store_products").upsert(payload);
+      throwSb(error);
+
+      if (prev && prev.stock !== payload.stock) {
+        const { error: mErr } = await client.from("stock_movements").insert({
+          id: newId(),
+          user_id: this.userId,
+          product_id: id,
+          qty_delta: payload.stock - prev.stock,
+          type: "adjust",
+          ref_id: id,
+          note: "Ajuste manual",
+          at: todayISO(),
+        });
+        throwSb(mErr);
+      }
+      return mapProduct({ ...payload, min_stock: payload.min_stock });
+    });
+  },
+
+  async importCatalogItem(item, { stock = 0 } = {}) {
     if (!item?.name) throw new Error(err("invalidProductName"));
     const barcode = String(item.barcode || "").replace(/\D/g, "");
     const existing = barcode ? this.findByBarcode(barcode) : null;
@@ -247,291 +460,348 @@ const db = {
       price: item.suggested_price ?? item.price ?? 0,
       cost: item.suggested_cost ?? item.cost ?? 0,
       stock: existing ? existing.stock : stock,
-      minStock: existing?.minStock ?? (item.unit === "g" ? 1000 : 5),
+      minStock: existing?.minStock ?? 5,
       active: true,
       barcode,
       sku: item.sku || barcode,
     });
   },
 
-  getOpenSession() {
-    return this.state.sessions.find((s) => s.status === "open") || null;
-  },
-
-  openSession(openingFloat, note = "") {
-    if (this.getOpenSession()) throw new Error(err("alreadyOpen"));
-    const session = {
-      id: uid("sess"),
-      status: "open",
-      openedAt: todayISO(),
-      closedAt: null,
-      openingFloat: roundMoney(openingFloat),
-      countedCash: null,
-      expectedCash: null,
-      difference: null,
-      note,
-    };
-    this.state.sessions.unshift(session);
-    this.persist();
-    return session;
-  },
-
-  closeSession(countedCash, note = "") {
-    const session = this.getOpenSession();
-    if (!session) throw new Error(err("noOpenSession"));
-    const sales = this.state.sales.filter(
-      (s) => s.sessionId === session.id && s.status === "confirmed"
-    );
-    const cashSales = sales.reduce((sum, sale) => {
-      return (
-        sum +
-        sale.payments
-          .filter((p) => p.method === "dinheiro")
-          .reduce((a, p) => a + p.amount, 0)
-      );
-    }, 0);
-    const expected = roundMoney(session.openingFloat + cashSales);
-    const counted = roundMoney(countedCash);
-    session.status = "closed";
-    session.closedAt = todayISO();
-    session.expectedCash = expected;
-    session.countedCash = counted;
-    session.difference = roundMoney(counted - expected);
-    session.closeNote = note;
-    this.state.cart = [];
-    this.persist();
-    return session;
-  },
-
-  listProducts({ onlyActive = true } = {}) {
-    return this.state.products
-      .filter((p) => (onlyActive ? p.active : true))
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  },
-
-  upsertProduct(input) {
-    const payload = {
-      name: String(input.name || "").trim(),
-      unit: input.unit === "un" ? "un" : "g",
-      price: roundMoney(input.price),
-      cost: roundMoney(input.cost || 0),
-      stock: Number(input.stock || 0),
-      minStock: Number(input.minStock || 0),
-      active: input.active !== false,
-      barcode: String(input.barcode || "").replace(/\D/g, "") || null,
-      sku: String(input.sku || input.barcode || "").trim() || null,
-    };
-    if (!payload.name) throw new Error(err("invalidProductName"));
-    if (payload.price < 0) throw new Error(err("invalidPrice"));
-
-    if (input.id) {
-      const idx = this.state.products.findIndex((p) => p.id === input.id);
-      if (idx < 0) throw new Error(err("productNotFound"));
-      const prev = this.state.products[idx];
-      const stockDelta = roundQty(payload.stock - prev.stock, payload.unit);
-      const { stock: _ignoredStock, ...rest } = payload;
-      this.state.products[idx] = { ...prev, ...rest, id: prev.id, stock: prev.stock };
-      if (stockDelta !== 0) {
-        this._moveStock(prev.id, stockDelta, "adjust", prev.id, "Ajuste manual");
-      } else {
-        this.persist();
-      }
-      return this.state.products[idx];
-    }
-
-    const product = { id: uid("prod"), ...payload };
-    this.state.products.push(product);
-    if (product.stock > 0) {
-      this._moveStock(product.id, product.stock, "adjust", product.id, "Estoque inicial", {
-        skipPersist: true,
-        skipMutate: true,
-      });
-    }
-    this.persist();
-    return product;
-  },
-
-  _moveStock(productId, qtyDelta, type, refId, note, opts = {}) {
-    const product = this.state.products.find((p) => p.id === productId);
-    if (!product) throw new Error(err("productNotInStock"));
-    if (!opts.skipMutate) {
-      const next = roundQty(product.stock + qtyDelta, product.unit);
-      if (next < -0.0001) throw new Error(err("stockInsufficientNamed", product.name));
-      product.stock = Math.max(0, next);
-    }
-    this.state.stockMovements.unshift({
-      id: uid("mov"),
-      productId,
-      qtyDelta,
-      type,
-      refId,
-      note,
-      at: todayISO(),
-    });
-    if (!opts.skipPersist) this.persist();
-  },
-
   setCart(cart) {
     this.state.cart = cart;
-    this.persist();
+    this.writeLocalCart();
+    this.notify();
   },
 
   clearCart() {
     this.state.cart = [];
-    this.persist();
+    this.writeLocalCart();
+    this.notify();
   },
 
-  confirmSale({ payments, note = "" }) {
-    const session = this.getOpenSession();
-    if (!session) throw new Error(err("openBeforeSell"));
-    const cart = this.state.cart;
-    if (!cart.length) throw new Error(err("emptyCart"));
-
-    for (const item of cart) {
-      const product = this.state.products.find((p) => p.id === item.productId);
-      if (!product || !product.active) throw new Error(err("invalidCartProduct"));
-      if (product.stock + 1e-9 < item.qty) {
-        throw new Error(err("stockInsufficientNamed", product.name));
-      }
-    }
-
-    const items = cart.map((item) => {
-      const product = this.state.products.find((p) => p.id === item.productId);
-      const total = lineTotal(item.qty, item.unit, item.unitPrice);
-      return {
-        productId: product.id,
-        name: product.name,
-        unit: product.unit,
-        qty: item.qty,
-        unitPrice: item.unitPrice,
-        costSnapshot: product.cost,
-        lineTotal: total,
+  async openSession(openingFloat, note = "") {
+    return this.withWrite(async () => {
+      if (this.getOpenSession()) throw new Error(err("alreadyOpen"));
+      const row = {
+        id: newId(),
+        user_id: this.userId,
+        status: "open",
+        opened_at: todayISO(),
+        opening_float: roundMoney(openingFloat),
+        note: note || "",
       };
+      const { error } = await sb().from("cash_sessions").insert(row);
+      throwSb(error);
+      return row;
     });
-
-    const total = roundMoney(items.reduce((s, i) => s + i.lineTotal, 0));
-    const payTotal = roundMoney(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
-    if (Math.abs(payTotal - total) > 0.009) {
-      throw new Error(err("paymentMismatch"));
-    }
-
-    const sale = {
-      id: uid("sale"),
-      sessionId: session.id,
-      status: "confirmed",
-      fiscalStatus: "none",
-      items,
-      payments: payments.map((p) => ({
-        method: p.method,
-        amount: roundMoney(p.amount),
-      })),
-      total,
-      note,
-      soldAt: todayISO(),
-    };
-
-    for (const item of items) {
-      this._moveStock(item.productId, -item.qty, "sale", sale.id, "Venda", {
-        skipPersist: true,
-      });
-    }
-
-    this.state.sales.unshift(sale);
-    this.state.cart = [];
-    this.persist();
-    return sale;
   },
 
-  cancelSale(saleId) {
-    const sale = this.state.sales.find((s) => s.id === saleId);
-    if (!sale) throw new Error(err("saleNotFound"));
-    if (sale.status === "cancelled") return sale;
-    const session = this.state.sessions.find((s) => s.id === sale.sessionId);
-    if (!session || session.status !== "open") {
-      throw new Error(err("cancelOnlyOpen"));
-    }
-    sale.status = "cancelled";
-    for (const item of sale.items) {
-      this._moveStock(item.productId, item.qty, "sale_cancel", sale.id, "Cancelamento", {
-        skipPersist: true,
-      });
-    }
-    this.persist();
-    return sale;
+  async closeSession(countedCash, note = "") {
+    return this.withWrite(async () => {
+      const session = this.getOpenSession();
+      if (!session) throw new Error(err("noOpenSession"));
+      const sales = this.state.sales.filter(
+        (s) => s.sessionId === session.id && s.status === "confirmed"
+      );
+      const cashSales = sales.reduce((sum, sale) => {
+        return (
+          sum +
+          sale.payments
+            .filter((p) => p.method === "dinheiro")
+            .reduce((a, p) => a + p.amount, 0)
+        );
+      }, 0);
+      const expected = roundMoney(session.openingFloat + cashSales);
+      const counted = roundMoney(countedCash);
+      const { error } = await sb()
+        .from("cash_sessions")
+        .update({
+          status: "closed",
+          closed_at: todayISO(),
+          expected_cash: expected,
+          counted_cash: counted,
+          difference: roundMoney(counted - expected),
+          close_note: note || "",
+        })
+        .eq("id", session.id)
+        .eq("user_id", this.userId);
+      throwSb(error);
+      this.clearCart();
+      return { ...session, status: "closed", expectedCash: expected, countedCash: counted };
+    });
   },
 
-  createPurchaseOrder({ supplierId, items, note = "" }) {
-    if (!items?.length) throw new Error(err("orderNeedsItems"));
-    const supplier = this.state.suppliers.find((s) => s.id === supplierId);
-    if (!supplier) throw new Error(err("invalidSupplier"));
-    const order = {
-      id: uid("po"),
-      supplierId,
-      supplierName: supplier.name,
-      status: "draft",
-      note,
-      createdAt: todayISO(),
-      receivedAt: null,
-      items: items.map((i) => {
-        const product = this.state.products.find((p) => p.id === i.productId);
-        if (!product) throw new Error(err("invalidOrderProduct"));
+  async confirmSale({ payments, note = "" }) {
+    return this.withWrite(async () => {
+      const client = sb();
+      const session = this.getOpenSession();
+      if (!session) throw new Error(err("openBeforeSell"));
+      const cart = this.state.cart;
+      if (!cart.length) throw new Error(err("emptyCart"));
+
+      for (const item of cart) {
+        const product = this.state.products.find((p) => p.id === item.productId);
+        if (!product || !product.active) throw new Error(err("invalidCartProduct"));
+        if (product.stock + 1e-9 < item.qty) {
+          throw new Error(err("stockInsufficientNamed", product.name));
+        }
+      }
+
+      const saleItems = cart.map((item) => {
+        const product = this.state.products.find((p) => p.id === item.productId);
         return {
           productId: product.id,
           name: product.name,
           unit: product.unit,
-          qtyOrdered: roundQty(i.qty, product.unit),
-          qtyReceived: 0,
-          unitCost: roundMoney(i.unitCost ?? product.cost),
+          qty: roundQty(item.qty),
+          unitPrice: roundMoney(item.unitPrice),
+          costSnapshot: product.cost,
+          lineTotal: lineTotal(item.qty, item.unit, item.unitPrice),
         };
-      }),
-    };
-    this.state.purchaseOrders.unshift(order);
-    this.persist();
-    return order;
-  },
-
-  markPurchaseSent(orderId) {
-    const order = this.state.purchaseOrders.find((o) => o.id === orderId);
-    if (!order) throw new Error(err("orderNotFound"));
-    if (order.status !== "draft") throw new Error(err("orderAlreadyProcessed"));
-    order.status = "sent";
-    this.persist();
-    return order;
-  },
-
-  receivePurchaseOrder(orderId, receipts) {
-    const order = this.state.purchaseOrders.find((o) => o.id === orderId);
-    if (!order) throw new Error(err("orderNotFound"));
-    if (order.status === "received" || order.status === "cancelled") {
-      throw new Error(err("orderCannotReceive"));
-    }
-
-    let any = false;
-    for (const rec of receipts) {
-      const line = order.items.find((i) => i.productId === rec.productId);
-      if (!line) continue;
-      const qty = roundQty(rec.qty || 0, line.unit);
-      if (qty <= 0) continue;
-      const remaining = roundQty(line.qtyOrdered - line.qtyReceived, line.unit);
-      const apply = Math.min(qty, remaining);
-      if (apply <= 0) continue;
-      any = true;
-      line.qtyReceived = roundQty(line.qtyReceived + apply, line.unit);
-      const product = this.state.products.find((p) => p.id === line.productId);
-      if (product) product.cost = line.unitCost;
-      this._moveStock(line.productId, apply, "purchase_in", order.id, "Recebimento", {
-        skipPersist: true,
       });
-    }
+      const total = roundMoney(saleItems.reduce((s, i) => s + i.lineTotal, 0));
+      const payTotal = roundMoney(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
+      if (Math.abs(payTotal - total) > 0.009) throw new Error(err("paymentMismatch"));
 
-    if (!any) throw new Error(err("nothingReceived"));
+      const saleId = newId();
+      const { error: sErr } = await client.from("sales").insert({
+        id: saleId,
+        user_id: this.userId,
+        session_id: session.id,
+        status: "confirmed",
+        fiscal_status: "none",
+        total,
+        note: note || "",
+        sold_at: todayISO(),
+      });
+      throwSb(sErr);
 
-    const complete = order.items.every((i) => i.qtyReceived + 1e-9 >= i.qtyOrdered);
-    order.status = complete ? "received" : "partial";
-    if (complete) order.receivedAt = todayISO();
-    this.persist();
-    return order;
+      const { error: iErr } = await client.from("sale_items").insert(
+        saleItems.map((i) => ({
+          id: newId(),
+          sale_id: saleId,
+          product_id: i.productId,
+          name: i.name,
+          unit: i.unit,
+          qty: i.qty,
+          unit_price: i.unitPrice,
+          cost_snapshot: i.costSnapshot,
+          line_total: i.lineTotal,
+        }))
+      );
+      throwSb(iErr);
+
+      const { error: pErr } = await client.from("sale_payments").insert(
+        payments.map((p) => ({
+          id: newId(),
+          sale_id: saleId,
+          method: p.method,
+          amount: roundMoney(p.amount),
+        }))
+      );
+      throwSb(pErr);
+
+      for (const item of saleItems) {
+        const product = this.state.products.find((p) => p.id === item.productId);
+        const nextStock = roundQty(product.stock - item.qty);
+        const { error: uErr } = await client
+          .from("store_products")
+          .update({ stock: nextStock })
+          .eq("id", item.productId)
+          .eq("user_id", this.userId);
+        throwSb(uErr);
+        const { error: mErr } = await client.from("stock_movements").insert({
+          id: newId(),
+          user_id: this.userId,
+          product_id: item.productId,
+          qty_delta: -item.qty,
+          type: "sale",
+          ref_id: saleId,
+          note: "Venda",
+          at: todayISO(),
+        });
+        throwSb(mErr);
+      }
+
+      this.state.cart = [];
+      this.writeLocalCart();
+      return { id: saleId, total };
+    });
+  },
+
+  async cancelSale(saleId) {
+    return this.withWrite(async () => {
+      const client = sb();
+      const sale = this.state.sales.find((s) => s.id === saleId);
+      if (!sale) throw new Error(err("saleNotFound"));
+      if (sale.status === "cancelled") return sale;
+      const session = this.state.sessions.find((s) => s.id === sale.sessionId);
+      if (!session || session.status !== "open") throw new Error(err("cancelOnlyOpen"));
+
+      const { error } = await client
+        .from("sales")
+        .update({ status: "cancelled" })
+        .eq("id", saleId)
+        .eq("user_id", this.userId);
+      throwSb(error);
+
+      for (const item of sale.items) {
+        const product = this.state.products.find((p) => p.id === item.productId);
+        if (!product) continue;
+        const nextStock = roundQty(product.stock + item.qty);
+        await client
+          .from("store_products")
+          .update({ stock: nextStock })
+          .eq("id", item.productId)
+          .eq("user_id", this.userId);
+        await client.from("stock_movements").insert({
+          id: newId(),
+          user_id: this.userId,
+          product_id: item.productId,
+          qty_delta: item.qty,
+          type: "sale_cancel",
+          ref_id: saleId,
+          note: "Cancelamento",
+          at: todayISO(),
+        });
+      }
+      return sale;
+    });
+  },
+
+  async createPurchaseOrder({ supplierId, items, note = "" }) {
+    return this.withWrite(async () => {
+      if (!items?.length) throw new Error(err("orderNeedsItems"));
+      const supplier = this.state.suppliers.find((s) => s.id === supplierId);
+      if (!supplier) throw new Error(err("invalidSupplier"));
+      const orderId = newId();
+      const client = sb();
+      const { error } = await client.from("purchase_orders").insert({
+        id: orderId,
+        user_id: this.userId,
+        supplier_id: supplierId,
+        supplier_name: supplier.name,
+        status: "draft",
+        note: note || "",
+        created_at: todayISO(),
+      });
+      throwSb(error);
+
+      const rows = items.map((i) => {
+        const product = this.state.products.find((p) => p.id === i.productId);
+        if (!product) throw new Error(err("invalidOrderProduct"));
+        return {
+          id: newId(),
+          order_id: orderId,
+          product_id: product.id,
+          name: product.name,
+          unit: product.unit,
+          qty_ordered: roundQty(i.qty),
+          qty_received: 0,
+          unit_cost: roundMoney(i.unitCost ?? product.cost),
+        };
+      });
+      const { error: iErr } = await client.from("purchase_order_items").insert(rows);
+      throwSb(iErr);
+      return { id: orderId };
+    });
+  },
+
+  async markPurchaseSent(orderId) {
+    return this.withWrite(async () => {
+      const order = this.state.purchaseOrders.find((o) => o.id === orderId);
+      if (!order) throw new Error(err("orderNotFound"));
+      if (order.status !== "draft") throw new Error(err("orderAlreadyProcessed"));
+      const { error } = await sb()
+        .from("purchase_orders")
+        .update({ status: "sent" })
+        .eq("id", orderId)
+        .eq("user_id", this.userId);
+      throwSb(error);
+    });
+  },
+
+  async receivePurchaseOrder(orderId, receipts) {
+    return this.withWrite(async () => {
+      const client = sb();
+      const order = this.state.purchaseOrders.find((o) => o.id === orderId);
+      if (!order) throw new Error(err("orderNotFound"));
+      if (order.status === "received" || order.status === "cancelled") {
+        throw new Error(err("orderCannotReceive"));
+      }
+
+      let any = false;
+      for (const rec of receipts) {
+        const line = order.items.find((i) => i.productId === rec.productId);
+        if (!line) continue;
+        const qty = roundQty(rec.qty || 0);
+        if (qty <= 0) continue;
+        const remaining = roundQty(line.qtyOrdered - line.qtyReceived);
+        const apply = Math.min(qty, remaining);
+        if (apply <= 0) continue;
+        any = true;
+        const nextReceived = roundQty(line.qtyReceived + apply);
+        await client
+          .from("purchase_order_items")
+          .update({ qty_received: nextReceived })
+          .eq("order_id", orderId)
+          .eq("product_id", line.productId);
+
+        const product = this.state.products.find((p) => p.id === line.productId);
+        if (product) {
+          await client
+            .from("store_products")
+            .update({
+              stock: roundQty(product.stock + apply),
+              cost: line.unitCost,
+            })
+            .eq("id", product.id)
+            .eq("user_id", this.userId);
+          await client.from("stock_movements").insert({
+            id: newId(),
+            user_id: this.userId,
+            product_id: product.id,
+            qty_delta: apply,
+            type: "purchase_in",
+            ref_id: orderId,
+            note: "Recebimento",
+            at: todayISO(),
+          });
+        }
+      }
+      if (!any) throw new Error(err("nothingReceived"));
+
+      // reload mid-transaction state for status calc
+      const { data: lines } = await client
+        .from("purchase_order_items")
+        .select("*")
+        .eq("order_id", orderId);
+      const complete = (lines || []).every(
+        (i) => Number(i.qty_received) + 1e-9 >= Number(i.qty_ordered)
+      );
+      await client
+        .from("purchase_orders")
+        .update({
+          status: complete ? "received" : "partial",
+          received_at: complete ? todayISO() : null,
+        })
+        .eq("id", orderId)
+        .eq("user_id", this.userId);
+    });
+  },
+
+  // ensure at least empty supplier list can grow from UI later
+  async ensureDefaultSupplier() {
+    if (this.state.suppliers.length) return;
+    await this.withWrite(async () => {
+      const { error } = await sb().from("store_suppliers").insert({
+        id: newId(),
+        user_id: this.userId,
+        name: "Fornecedor geral",
+        phone: "",
+      });
+      throwSb(error);
+    });
   },
 
   sessionSales(sessionId) {
@@ -560,8 +830,7 @@ const db = {
           };
         }
         byProduct[item.productId].qty = roundQty(
-          byProduct[item.productId].qty + item.qty,
-          item.unit
+          byProduct[item.productId].qty + item.qty
         );
         byProduct[item.productId].total = roundMoney(
           byProduct[item.productId].total + item.lineTotal
@@ -575,8 +844,8 @@ const db = {
       total: roundMoney(total),
       byMethod,
       byProduct: Object.values(byProduct).sort((a, b) => b.total - a.total),
-      gramsSold: roundQty(gramsSold, "g"),
-      kgSold: roundQty(gramsSold, "g"), // compat
+      gramsSold: roundQty(gramsSold),
+      kgSold: roundQty(gramsSold),
       sales,
     };
   },
@@ -613,7 +882,7 @@ function formatDateTime(iso) {
 
 window.elERP = {
   db,
-  uid,
+  uid: newId,
   roundMoney,
   roundQty,
   lineTotal,

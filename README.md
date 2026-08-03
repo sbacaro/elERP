@@ -12,11 +12,15 @@ https://sbacaro.github.io/elERP/
 
 Projeto: `https://jdkggegrreixywoyhkmb.supabase.co`
 
-### 1. Tabelas
+### 1. Tabelas (fonte da verdade)
 
 1. Abra o [SQL Editor](https://supabase.com/dashboard/project/jdkggegrreixywoyhkmb/sql/new)
-2. Rode `supabase/schema.sql` (estado do PDV por usuário)
-3. Rode `supabase/catalog_bebidas_br.sql` (~420 bebidas BR com código de barras)
+2. Rode **`supabase/full_schema.sql`** — produtos, caixa, vendas, estoque, compras + RLS + Realtime
+3. Rode **`supabase/catalog_bebidas_br.sql`** — catálogo de ~420 bebidas BR (`product_catalog`)
+
+Após isso, o app lê e grava só no Supabase. Alterações no Dashboard refletem no site (Realtime), e o que você cadastra no site aparece nas tabelas.
+
+> `supabase/schema.sql` é legado (`app_state` jsonb). Use só se precisar migrar dados antigos; o app novo usa as tabelas normalizadas.
 
 ### 2. URLs de autenticação
 
@@ -29,14 +33,28 @@ Em **Authentication → URL Configuration**:
 
 Em **Authentication → Providers → Email**, desative **Confirm email** para entrar logo após criar a conta.
 
+## Dados da loja
+
+| Tabela | Conteúdo |
+|--------|----------|
+| `store_products` | Produtos da loja (sem seed hardcoded no app) |
+| `cash_sessions` | Abertura/fechamento de caixa |
+| `sales` / `sale_items` / `sale_payments` | Vendas |
+| `stock_movements` | Movimentos de estoque |
+| `purchase_orders` / `purchase_order_items` | Pedidos de compra |
+| `store_suppliers` | Fornecedores |
+| `product_catalog` | Catálogo de barras para importar |
+
+Carrinho do PDV fica só no navegador (localStorage) até confirmar a venda.
+
 ## Catálogo de códigos (Open Food Facts)
 
-Fonte: [Open Food Facts](https://world.openfoodfacts.org/data) (Brasil: águas, refrigerantes, sucos, chás, energéticos) + códigos curados.
+Fonte: [Open Food Facts](https://world.openfoodfacts.org/data) (Brasil) + códigos curados.
 
-- Pages/JSON: `data/catalog-bebidas-br.json`
-- Supabase: tabela `product_catalog` (se o SQL foi rodado; senão o site usa o JSON)
+- Preferência: tabela `product_catalog` no Supabase
+- Fallback: `data/catalog-bebidas-br.json` no Pages
 
-No app: aba **Catálogo** → buscar → **Importar**. No caixa: campo de código de barras + Enter.
+No app: aba **Catálogo** → buscar → **Importar**. No caixa: código de barras + Enter.
 
 ## Fluxo de peso
 

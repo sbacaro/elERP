@@ -185,9 +185,9 @@ function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm) 
   };
 
   cancelBtn.onclick = close;
-  confirmBtn.onclick = () => {
+  confirmBtn.onclick = async () => {
     try {
-      onConfirm(bodyEl);
+      await onConfirm(bodyEl);
       close();
     } catch (err) {
       toast(err.message || String(err), true);
@@ -467,7 +467,7 @@ function wireWeightDialogScale(weightInput) {
   observer.observe(backdrop, { attributes: true, attributeFilter: ["class"] });
 }
 
-function checkout() {
+async function checkout() {
   try {
     if (!db.getOpenSession()) throw new Error(t.errors.openBeforeSell);
     if (!db.state.cart.length) throw new Error(t.errors.emptyCart);
@@ -477,9 +477,10 @@ function checkout() {
     if (Math.abs(amount - total) > 0.009) {
       throw new Error(t.errors.payMustMatchTotal);
     }
-    const sale = db.confirmSale({ payments: [{ method, amount }] });
+    const sale = await db.confirmSale({ payments: [{ method, amount }] });
     toast(t.saleRegistered(money(sale.total)));
     renderPos();
+    renderProducts();
     refreshSessionPill();
   } catch (err) {
     toast(err.message || String(err), true);
@@ -570,7 +571,7 @@ async function handlePosBarcode(code) {
     await ensureCatalog();
     const item = catalog?.findByBarcode(digits);
     if (item) {
-      product = db.importCatalogItem(item, { stock: 20 });
+      product = await db.importCatalogItem(item, { stock: 20 });
       toast(t.catalogImported);
     }
   }
@@ -638,7 +639,7 @@ function openProductForm(product = null) {
       </div>
     `,
     (body) => {
-      db.upsertProduct({
+      return db.upsertProduct({
         id: product?.id,
         name: body.querySelector("#pName").value,
         barcode: body.querySelector("#pBarcode").value,
@@ -649,10 +650,11 @@ function openProductForm(product = null) {
         stock: body.querySelector("#pStock").value,
         minStock: body.querySelector("#pMin").value,
         active: body.querySelector("#pActive").value === "1",
+      }).then(() => {
+        toast(t.productSaved);
+        renderProducts();
+        renderPos();
       });
-      toast(t.productSaved);
-      renderProducts();
-      renderPos();
     },
     t.save
   );
@@ -692,9 +694,14 @@ function renderPurchases() {
     .join("");
 }
 
-function openNewPurchase() {
+async function openNewPurchase() {
+  await db.ensureDefaultSupplier();
   const products = db.listProducts();
   const suppliers = db.state.suppliers;
+  if (!products.length) {
+    toast("Cadastre produtos antes de criar pedido de compra.", true);
+    return;
+  }
   const options = products
     .map((p) => `<option value="${p.id}">${escapeHtml(p.name)} (${p.unit})</option>`)
     .join("");
@@ -729,11 +736,11 @@ function openNewPurchase() {
       </div>
       <p class="muted">${t.purchaseHint}</p>
     `,
-    (body) => {
+    async (body) => {
       const productId = body.querySelector("#poProduct").value;
       const product = db.state.products.find((p) => p.id === productId);
       const costRaw = body.querySelector("#poCost").value;
-      db.createPurchaseOrder({
+      await db.createPurchaseOrder({
         supplierId: body.querySelector("#poSupplier").value,
         note: body.querySelector("#poNote").value,
         items: [
@@ -777,12 +784,12 @@ function receivePurchase(orderId) {
   openDialog(
     t.receiveOrder,
     fields,
-    (body) => {
+    async (body) => {
       const receipts = [...body.querySelectorAll("[data-rec]")].map((el) => ({
         productId: el.dataset.rec,
         qty: el.value,
       }));
-      db.receivePurchaseOrder(orderId, receipts);
+      await db.receivePurchaseOrder(orderId, receipts);
       toast(t.receiptDone);
       renderPurchases();
       renderProducts();
@@ -887,8 +894,8 @@ function openCashSession() {
         <input id="openNote" placeholder="${t.optional}" />
       </div>
     `,
-    (body) => {
-      db.openSession(body.querySelector("#openFloat").value, body.querySelector("#openNote").value);
+    async (body) => {
+      await db.openSession(body.querySelector("#openFloat").value, body.querySelector("#openNote").value);
       toast(t.cashOpened);
       refreshSessionPill();
       renderPos();
@@ -920,8 +927,8 @@ function closeCashSession() {
         <input id="closeNote" placeholder="${t.optional}" />
       </div>
     `,
-    (body) => {
-      const session = db.closeSession(
+    async (body) => {
+      const session = await db.closeSession(
         body.querySelector("#closeCounted").value,
         body.querySelector("#closeNote").value
       );
@@ -966,13 +973,13 @@ function bindEvents() {
   });
   document.getElementById("catalogSearch")?.addEventListener("input", () => renderCatalog());
   document.getElementById("catalogGroup")?.addEventListener("change", () => renderCatalog());
-  document.getElementById("catalogBody")?.addEventListener("click", (e) => {
+  document.getElementById("catalogBody")?.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-import-barcode]");
     if (!btn) return;
     try {
       const item = catalog.findByBarcode(btn.dataset.importBarcode);
       if (!item) throw new Error(t.catalogEmpty);
-      db.importCatalogItem(item, { stock: 20 });
+      await db.importCatalogItem(item, { stock: 20 });
       toast(t.catalogImported);
       renderProducts();
       renderPos();
@@ -1017,12 +1024,12 @@ function bindEvents() {
     if (product) openProductForm(product);
   });
 
-  document.getElementById("purchasesBody").addEventListener("click", (e) => {
+  document.getElementById("purchasesBody").addEventListener("click", async (e) => {
     const send = e.target.closest("[data-po-send]");
     const receive = e.target.closest("[data-po-receive]");
     if (send) {
       try {
-        db.markPurchaseSent(send.dataset.poSend);
+        await db.markPurchaseSent(send.dataset.poSend);
         toast(t.orderMarkedSent);
         renderPurchases();
       } catch (err) {
@@ -1032,12 +1039,12 @@ function bindEvents() {
     if (receive) receivePurchase(receive.dataset.poReceive);
   });
 
-  document.getElementById("dayReport").addEventListener("click", (e) => {
+  document.getElementById("dayReport").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-cancel-sale]");
     if (!btn) return;
     if (!confirm(t.cancelSaleConfirm)) return;
     try {
-      db.cancelSale(btn.dataset.cancelSale);
+      await db.cancelSale(btn.dataset.cancelSale);
       toast(t.saleCancelled);
       renderDay();
       renderPos();
@@ -1122,6 +1129,13 @@ async function bootAuth() {
 
   db.onSync = (status) => {
     if (status === "error") toast(t.syncError, true);
+  };
+
+  db.onChange = () => {
+    if (!db.ready) return;
+    refreshSessionPill();
+    const active = document.querySelector(".panel.active")?.id || "panel-pos";
+    switchPanel(active);
   };
 
   const {

@@ -24,7 +24,7 @@ const t = {
   syncError: "Não foi possível salvar na nuvem.",
   loadError: "Não foi possível carregar seus dados.",
   schemaMissing:
-    "Tabela ainda não criada no Supabase. Rode o arquivo supabase/schema.sql no SQL Editor.",
+    "Schema ainda não criado no Supabase. Rode supabase/full_schema.sql (e catalog_bebidas_br.sql) no SQL Editor.",
 
   nav: {
     pos: "Caixa",
@@ -195,8 +195,8 @@ const t = {
   dialogConfirm: "Confirmar",
 
   footerStorage: "Dados na sua conta Supabase",
-  resetDemo: "Restaurar demonstração",
-  resetConfirm: "Zerar dados desta conta e recarregar a demonstração?",
+  resetDemo: "Zerar dados da conta",
+  resetConfirm: "Apagar produtos, vendas, caixa e pedidos desta conta no Supabase?",
 
   saleRegistered: (total) => `Venda ${total} registrada`,
   stockInsufficient: "Estoque insuficiente.",
