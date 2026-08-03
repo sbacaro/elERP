@@ -51,7 +51,70 @@ function emptyState() {
     suppliers: [],
     purchaseOrders: [],
     cart: [],
+    settings: null,
+    members: [],
+    addons: [],
+    role: "owner",
   };
+}
+
+function defaultSettings(userId) {
+  return {
+    userId,
+    tradeName: "Minha loja",
+    legalName: "",
+    cnpj: "",
+    ie: "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+    receiptMessage: "Obrigado pela preferência!",
+    fiscalMode: "nao_fiscal",
+    cscId: "",
+    cscToken: "",
+  };
+}
+
+function mapSettings(row, userId) {
+  if (!row) return defaultSettings(userId);
+  return {
+    userId: row.user_id || userId,
+    tradeName: row.trade_name || "Minha loja",
+    legalName: row.legal_name || "",
+    cnpj: row.cnpj || "",
+    ie: row.ie || "",
+    phone: row.phone || "",
+    address: row.address || "",
+    city: row.city || "",
+    state: row.state || "",
+    zip: row.zip || "",
+    receiptMessage: row.receipt_message || "Obrigado pela preferência!",
+    fiscalMode: row.fiscal_mode || "nao_fiscal",
+    cscId: row.csc_id || "",
+    cscToken: row.csc_token || "",
+  };
+}
+
+function cartLineTotal(item) {
+  const base = lineTotal(item.qty, item.unit, item.unitPrice);
+  const addons = (item.addons || []).reduce((s, a) => s + roundMoney(a.price || 0), 0);
+  return roundMoney(base + addons);
+}
+
+function summarizePayments(payments, total) {
+  const cleaned = (payments || [])
+    .map((p) => ({ method: p.method, amount: roundMoney(p.amount) }))
+    .filter((p) => p.amount > 0);
+  const payTotal = roundMoney(cleaned.reduce((s, p) => s + p.amount, 0));
+  const cash = roundMoney(cleaned.filter((p) => p.method === "dinheiro").reduce((s, p) => s + p.amount, 0));
+  const nonCash = roundMoney(payTotal - cash);
+  if (nonCash - total > 0.009) throw new Error(err("nonCashOverpay"));
+  if (payTotal + 1e-9 < total) throw new Error(err("paymentInsufficient"));
+  const change = roundMoney(Math.max(0, payTotal - total));
+  if (change > 0.009 && cash + 1e-9 < change) throw new Error(err("changeNeedsCash"));
+  return { cleaned, payTotal, change };
 }
 
 function mapProduct(row) {
@@ -118,8 +181,12 @@ const db = {
     this.userId = userId;
     this.ready = false;
     await this.reload();
-    await this.maybeMigrateLegacyAppState();
-    await this.reload();
+    // Migração legada desligada por padrão (evita reidratar seeds antigos).
+    if (window.elERPConfig?.migrateLegacy === true) {
+      await this.maybeMigrateLegacyAppState();
+      await this.reload();
+    }
+    await this.ensureStoreBootstrap();
     this.subscribeRealtime();
     this.ready = true;
     this.notify();
@@ -137,23 +204,38 @@ const db = {
       salesRes,
       movementsRes,
       ordersRes,
+      settingsRes,
+      membersRes,
+      addonsRes,
     ] = await Promise.all([
       client.from("store_products").select("*").eq("user_id", uid).order("name"),
       client.from("store_suppliers").select("*").eq("user_id", uid).order("name"),
       client.from("cash_sessions").select("*").eq("user_id", uid).order("opened_at", { ascending: false }),
-      client.from("sales").select("*").eq("user_id", uid).order("sold_at", { ascending: false }).limit(500),
-      client.from("stock_movements").select("*").eq("user_id", uid).order("at", { ascending: false }).limit(500),
+      client.from("sales").select("*").eq("user_id", uid).order("sold_at", { ascending: false }).limit(2000),
+      client.from("stock_movements").select("*").eq("user_id", uid).order("at", { ascending: false }).limit(2000),
       client.from("purchase_orders").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
+      client.from("store_settings").select("*").eq("user_id", uid).maybeSingle(),
+      client.from("store_members").select("*").eq("user_id", uid).order("created_at"),
+      client.from("product_addons").select("*").eq("user_id", uid).order("name"),
     ]);
 
+    // settings/members/addons podem faltar se extend_complete.sql ainda não rodou
     for (const res of [productsRes, suppliersRes, sessionsRes, salesRes, movementsRes, ordersRes]) {
       throwSb(res.error);
     }
+    const optionalMissing = (res) =>
+      res?.error && /relation .* does not exist|Could not find the table|schema cache/i.test(
+        `${res.error.message || ""} ${res.error.code || ""}`
+      );
+    if (settingsRes.error && !optionalMissing(settingsRes)) throwSb(settingsRes.error);
+    if (membersRes.error && !optionalMissing(membersRes)) throwSb(membersRes.error);
+    if (addonsRes.error && !optionalMissing(addonsRes)) throwSb(addonsRes.error);
 
     const sales = salesRes.data || [];
     const saleIds = sales.map((s) => s.id);
     let items = [];
     let payments = [];
+    let itemAddons = [];
     if (saleIds.length) {
       const [itemsRes, payRes] = await Promise.all([
         client.from("sale_items").select("*").in("sale_id", saleIds),
@@ -163,6 +245,14 @@ const db = {
       throwSb(payRes.error);
       items = itemsRes.data || [];
       payments = payRes.data || [];
+      const itemIds = items.map((i) => i.id);
+      if (itemIds.length) {
+        const iaRes = await client.from("sale_item_addons").select("*").in("sale_item_id", itemIds);
+        if (!(iaRes.error && optionalMissing(iaRes))) {
+          if (iaRes.error) throwSb(iaRes.error);
+          itemAddons = iaRes.data || [];
+        }
+      }
     }
 
     const orderIds = (ordersRes.data || []).map((o) => o.id);
@@ -173,8 +263,29 @@ const db = {
       orderItems = oiRes.data || [];
     }
 
+    const members = optionalMissing(membersRes) ? [] : (membersRes.data || []).map((m) => ({
+      id: m.id,
+      email: m.email,
+      role: m.role,
+      active: m.active !== false,
+      memberUserId: m.member_user_id,
+    }));
+    const owner = members.find((m) => m.role === "owner") || { role: "owner" };
+
     this.state = {
       products: (productsRes.data || []).map(mapProduct),
+      settings: optionalMissing(settingsRes) ? defaultSettings(uid) : mapSettings(settingsRes.data, uid),
+      members,
+      role: owner.role || "owner",
+      addons: optionalMissing(addonsRes)
+        ? []
+        : (addonsRes.data || []).map((a) => ({
+            id: a.id,
+            productId: a.product_id,
+            name: a.name,
+            price: Number(a.price) || 0,
+            active: a.active !== false,
+          })),
       suppliers: (suppliersRes.data || []).map((s) => ({
         id: s.id,
         name: s.name,
@@ -203,6 +314,7 @@ const db = {
         items: items
           .filter((i) => i.sale_id === s.id)
           .map((i) => ({
+            id: i.id,
             productId: i.product_id,
             name: i.name,
             unit: i.unit,
@@ -210,10 +322,14 @@ const db = {
             unitPrice: Number(i.unit_price) || 0,
             costSnapshot: Number(i.cost_snapshot) || 0,
             lineTotal: Number(i.line_total) || 0,
+            addons: itemAddons
+              .filter((a) => a.sale_item_id === i.id)
+              .map((a) => ({ id: a.addon_id, name: a.name, price: Number(a.price) || 0 })),
           })),
         payments: payments
           .filter((p) => p.sale_id === s.id)
           .map((p) => ({ method: p.method, amount: Number(p.amount) || 0 })),
+        changeAmount: Number(s.change_amount) || 0,
       })),
       stockMovements: (movementsRes.data || []).map((m) => ({
         id: m.id,
@@ -278,6 +394,10 @@ const db = {
       "sales",
       "sale_items",
       "sale_payments",
+      "store_settings",
+      "store_members",
+      "product_addons",
+      "sale_item_addons",
       "stock_movements",
       "purchase_orders",
       "purchase_order_items",
@@ -510,12 +630,10 @@ const db = {
         (s) => s.sessionId === session.id && s.status === "confirmed"
       );
       const cashSales = sales.reduce((sum, sale) => {
-        return (
-          sum +
-          sale.payments
-            .filter((p) => p.method === "dinheiro")
-            .reduce((a, p) => a + p.amount, 0)
-        );
+        const cashIn = sale.payments
+          .filter((p) => p.method === "dinheiro")
+          .reduce((a, p) => a + p.amount, 0);
+        return sum + cashIn - (sale.changeAmount || 0);
       }, 0);
       const expected = roundMoney(session.openingFloat + cashSales);
       const counted = roundMoney(countedCash);
@@ -537,12 +655,12 @@ const db = {
     });
   },
 
-  async confirmSale({ payments, note = "" }) {
+  async confirmSale({ payments, note = "", cartOverride = null } = {}) {
     return this.withWrite(async () => {
       const client = sb();
       const session = this.getOpenSession();
       if (!session) throw new Error(err("openBeforeSell"));
-      const cart = this.state.cart;
+      const cart = cartOverride || this.state.cart;
       if (!cart.length) throw new Error(err("emptyCart"));
 
       for (const item of cart) {
@@ -555,37 +673,49 @@ const db = {
 
       const saleItems = cart.map((item) => {
         const product = this.state.products.find((p) => p.id === item.productId);
-        const unit = normalizeUnit(product.unit);
+        const unit = normalizeUnit(item.unit || product.unit);
+        const addons = (item.addons || []).map((a) => ({
+          id: a.id || null,
+          name: a.name,
+          price: roundMoney(a.price || 0),
+        }));
+        const base = lineTotal(item.qty, unit, item.unitPrice);
+        const addonTotal = roundMoney(addons.reduce((s, a) => s + a.price, 0));
         return {
+          id: newId(),
           productId: product.id,
           name: product.name,
           unit,
           qty: roundQty(item.qty, unit),
           unitPrice: roundMoney(item.unitPrice),
           costSnapshot: product.cost,
-          lineTotal: lineTotal(item.qty, unit, item.unitPrice),
+          lineTotal: roundMoney(base + addonTotal),
+          addons,
         };
       });
       const total = roundMoney(saleItems.reduce((s, i) => s + i.lineTotal, 0));
-      const payTotal = roundMoney(payments.reduce((s, p) => s + Number(p.amount || 0), 0));
-      if (Math.abs(payTotal - total) > 0.009) throw new Error(err("paymentMismatch"));
+      const { cleaned, change } = summarizePayments(payments, total);
+      const fiscalStatus =
+        this.state.settings?.fiscalMode === "nfce_futuro" ? "pendente_nfce" : "nao_fiscal";
 
       const saleId = newId();
+      const soldAt = todayISO();
       const { error: sErr } = await client.from("sales").insert({
         id: saleId,
         user_id: this.userId,
         session_id: session.id,
         status: "confirmed",
-        fiscal_status: "none",
+        fiscal_status: fiscalStatus,
         total,
+        change_amount: change,
         note: note || "",
-        sold_at: todayISO(),
+        sold_at: soldAt,
       });
       throwSb(sErr);
 
       const { error: iErr } = await client.from("sale_items").insert(
         saleItems.map((i) => ({
-          id: newId(),
+          id: i.id,
           sale_id: saleId,
           product_id: i.productId,
           name: i.name,
@@ -598,12 +728,31 @@ const db = {
       );
       throwSb(iErr);
 
+      const addonRows = [];
+      for (const i of saleItems) {
+        for (const a of i.addons) {
+          addonRows.push({
+            id: newId(),
+            sale_item_id: i.id,
+            addon_id: a.id,
+            name: a.name,
+            price: a.price,
+          });
+        }
+      }
+      if (addonRows.length) {
+        const { error: aErr } = await client.from("sale_item_addons").insert(addonRows);
+        if (aErr && !/relation .* does not exist|Could not find the table/i.test(aErr.message || "")) {
+          throwSb(aErr);
+        }
+      }
+
       const { error: pErr } = await client.from("sale_payments").insert(
-        payments.map((p) => ({
+        cleaned.map((p) => ({
           id: newId(),
           sale_id: saleId,
           method: p.method,
-          amount: roundMoney(p.amount),
+          amount: p.amount,
         }))
       );
       throwSb(pErr);
@@ -625,14 +774,24 @@ const db = {
           type: "sale",
           ref_id: saleId,
           note: "Venda",
-          at: todayISO(),
+          at: soldAt,
         });
         throwSb(mErr);
       }
 
-      this.state.cart = [];
-      this.writeLocalCart();
-      return { id: saleId, total };
+      if (!cartOverride) {
+        this.state.cart = [];
+        this.writeLocalCart();
+      }
+      return {
+        id: saleId,
+        total,
+        change,
+        soldAt,
+        fiscalStatus,
+        items: saleItems,
+        payments: cleaned,
+      };
     });
   },
 
@@ -812,7 +971,244 @@ const db = {
     });
   },
 
-  sessionSales(sessionId) {
+
+  async ensureStoreBootstrap() {
+    const client = sb();
+    if (!client || !this.userId) return;
+    try {
+      const { data } = await client
+        .from("store_settings")
+        .select("user_id")
+        .eq("user_id", this.userId)
+        .maybeSingle();
+      if (!data) {
+        await client.from("store_settings").upsert({
+          user_id: this.userId,
+          trade_name: "Minha loja",
+          receipt_message: "Obrigado pela preferência!",
+          fiscal_mode: "nao_fiscal",
+        });
+      }
+      const { data: members } = await client
+        .from("store_members")
+        .select("id")
+        .eq("user_id", this.userId)
+        .eq("role", "owner")
+        .limit(1);
+      if (!(members || []).length) {
+        const email = (await client.auth.getUser()).data?.user?.email || "owner@local";
+        await client.from("store_members").upsert(
+          {
+            id: newId(),
+            user_id: this.userId,
+            member_user_id: this.userId,
+            email,
+            role: "owner",
+            active: true,
+          },
+          { onConflict: "user_id,email" }
+        );
+      }
+      await this.reload();
+    } catch (e) {
+      // extend_complete.sql ainda não aplicado
+      if (!this.state.settings) this.state.settings = defaultSettings(this.userId);
+      if (!this.state.role) this.state.role = "owner";
+    }
+  },
+
+  canManage() {
+    return this.state.role === "owner" || this.state.role === "manager";
+  },
+
+  canEditStore() {
+    return this.state.role === "owner";
+  },
+
+  listAddonsForProduct(productId) {
+    return (this.state.addons || []).filter((a) => a.productId === productId && a.active);
+  },
+
+  async saveSettings(input) {
+    if (!this.canEditStore()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const payload = {
+        user_id: this.userId,
+        trade_name: String(input.tradeName || "").trim() || "Minha loja",
+        legal_name: String(input.legalName || "").trim(),
+        cnpj: String(input.cnpj || "").trim(),
+        ie: String(input.ie || "").trim(),
+        phone: String(input.phone || "").trim(),
+        address: String(input.address || "").trim(),
+        city: String(input.city || "").trim(),
+        state: String(input.state || "").trim().toUpperCase().slice(0, 2),
+        zip: String(input.zip || "").trim(),
+        receipt_message: String(input.receiptMessage || "").trim(),
+        fiscal_mode: input.fiscalMode === "nfce_futuro" ? "nfce_futuro" : "nao_fiscal",
+        csc_id: String(input.cscId || "").trim(),
+        csc_token: String(input.cscToken || "").trim(),
+        updated_at: todayISO(),
+      };
+      const { error } = await sb().from("store_settings").upsert(payload);
+      throwSb(error);
+    });
+  },
+
+  async upsertMember({ id, email, role }) {
+    if (!this.canEditStore()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const cleanEmail = String(email || "").trim().toLowerCase();
+      if (!cleanEmail) throw new Error(err("invalidEmail"));
+      const r = ["owner", "manager", "cashier"].includes(role) ? role : "cashier";
+      if (r === "owner") throw new Error(err("cannotAddOwner"));
+      const payload = {
+        id: id && /^[0-9a-f-]{36}$/i.test(id) ? id : newId(),
+        user_id: this.userId,
+        email: cleanEmail,
+        role: r,
+        active: true,
+      };
+      const { error } = await sb().from("store_members").upsert(payload, { onConflict: "user_id,email" });
+      throwSb(error);
+    });
+  },
+
+  async removeMember(id) {
+    if (!this.canEditStore()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const row = this.state.members.find((m) => m.id === id);
+      if (!row) return;
+      if (row.role === "owner") throw new Error(err("cannotRemoveOwner"));
+      const { error } = await sb().from("store_members").delete().eq("id", id).eq("user_id", this.userId);
+      throwSb(error);
+    });
+  },
+
+  async upsertAddon({ id, productId, name, price, active = true }) {
+    if (!this.canManage()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const payload = {
+        id: id && /^[0-9a-f-]{36}$/i.test(id) ? id : newId(),
+        user_id: this.userId,
+        product_id: productId,
+        name: String(name || "").trim(),
+        price: roundMoney(price || 0),
+        active: active !== false,
+      };
+      if (!payload.name) throw new Error(err("invalidProductName"));
+      const { error } = await sb().from("product_addons").upsert(payload);
+      throwSb(error);
+      return payload;
+    });
+  },
+
+  async deleteAddon(id) {
+    if (!this.canManage()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const { error } = await sb().from("product_addons").delete().eq("id", id).eq("user_id", this.userId);
+      throwSb(error);
+    });
+  },
+
+  async upsertSupplier({ id, name, phone = "" }) {
+    if (!this.canManage()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const payload = {
+        id: id && /^[0-9a-f-]{36}$/i.test(id) ? id : newId(),
+        user_id: this.userId,
+        name: String(name || "").trim(),
+        phone: String(phone || "").trim(),
+      };
+      if (!payload.name) throw new Error(err("invalidSupplier"));
+      const { error } = await sb().from("store_suppliers").upsert(payload);
+      throwSb(error);
+      return payload;
+    });
+  },
+
+  async deleteSupplier(id) {
+    if (!this.canManage()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const { error } = await sb().from("store_suppliers").delete().eq("id", id).eq("user_id", this.userId);
+      throwSb(error);
+    });
+  },
+
+  async adjustStock(productId, qtyDelta, note = "") {
+    if (!this.canManage()) throw new Error(err("forbidden"));
+    return this.withWrite(async () => {
+      const product = this.state.products.find((p) => p.id === productId);
+      if (!product) throw new Error(err("productNotFound"));
+      const delta = roundQty(qtyDelta, product.unit);
+      if (!delta) throw new Error(err("nothingReceived"));
+      const next = roundQty(product.stock + delta, product.unit);
+      if (next < -1e-9) throw new Error(err("stockInsufficientNamed", product.name));
+      const client = sb();
+      const { error } = await client
+        .from("store_products")
+        .update({ stock: next })
+        .eq("id", productId)
+        .eq("user_id", this.userId);
+      throwSb(error);
+      const { error: mErr } = await client.from("stock_movements").insert({
+        id: newId(),
+        user_id: this.userId,
+        product_id: productId,
+        qty_delta: delta,
+        type: "adjust",
+        ref_id: productId,
+        note: note || "Ajuste de inventário",
+        at: todayISO(),
+      });
+      throwSb(mErr);
+    });
+  },
+
+  reportForPeriod({ fromIso, toIso } = {}) {
+    const from = fromIso ? new Date(fromIso).getTime() : 0;
+    const to = toIso ? new Date(toIso).getTime() : Date.now();
+    const sales = this.state.sales.filter((s) => {
+      if (s.status !== "confirmed") return false;
+      const t = new Date(s.soldAt).getTime();
+      return t >= from && t <= to;
+    });
+    const byMethod = { dinheiro: 0, pix: 0, cartao: 0 };
+    const byProduct = {};
+    let total = 0;
+    let cost = 0;
+    let gramsSold = 0;
+    for (const sale of sales) {
+      total += sale.total;
+      for (const p of sale.payments) {
+        byMethod[p.method] = roundMoney((byMethod[p.method] || 0) + p.amount);
+      }
+      for (const item of sale.items) {
+        const key = item.productId || item.name;
+        if (!byProduct[key]) {
+          byProduct[key] = { name: item.name, unit: item.unit, qty: 0, total: 0, cost: 0 };
+        }
+        byProduct[key].qty = roundQty(byProduct[key].qty + item.qty, item.unit);
+        byProduct[key].total = roundMoney(byProduct[key].total + item.lineTotal);
+        const lineCost = roundMoney((item.costSnapshot || 0) * (item.unit === "g" ? item.qty / 1000 : item.qty));
+        byProduct[key].cost = roundMoney(byProduct[key].cost + lineCost);
+        cost += lineCost;
+        if (item.unit === "g") gramsSold += item.qty;
+        else if (item.unit === "kg") gramsSold += item.qty * 1000;
+      }
+    }
+    return {
+      salesCount: sales.length,
+      total: roundMoney(total),
+      cost: roundMoney(cost),
+      margin: roundMoney(total - cost),
+      byMethod,
+      byProduct: Object.values(byProduct).sort((a, b) => b.total - a.total),
+      gramsSold: roundQty(gramsSold, "g"),
+      sales,
+    };
+  },
+
+    sessionSales(sessionId) {
     return this.state.sales.filter((s) => s.sessionId === sessionId && s.status === "confirmed");
   },
 
@@ -898,6 +1294,7 @@ window.elERP = {
   roundMoney,
   roundQty,
   lineTotal,
+  cartLineTotal,
   formatMoney,
   formatQty,
   formatDateTime,

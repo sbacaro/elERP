@@ -1,6 +1,6 @@
 -- elERP · schema completo (rode no SQL Editor)
 -- Projeto: jdkggegrreixywoyhkmb
--- Depois rode também: catalog_bebidas_br.sql
+-- Depois rode: extend_complete.sql e catalog_bebidas_br.sql
 
 create extension if not exists pgcrypto;
 
