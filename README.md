@@ -1,6 +1,6 @@
 # elERP
 
-PDV para comércio de sorvete por quilo — GitHub Pages + Supabase (login e dados na nuvem).
+PDV para açaí/sorvete — venda por **gramas**, preço do sabor por **kg**, GitHub Pages + Supabase.
 
 **Idioma:** português do Brasil (pt-BR).
 
@@ -25,43 +25,19 @@ Em **Authentication → URL Configuration**:
 - **Site URL:** `https://sbacaro.github.io/elERP/`
 - **Redirect URLs:** `https://sbacaro.github.io/elERP/**`
 
-### 3. (Recomendado para começar) confirmar e-mail
+### 3. (Recomendado) confirmar e-mail
 
-Em **Authentication → Providers → Email**, desative **Confirm email** se quiser entrar logo após “Criar conta”.
+Em **Authentication → Providers → Email**, desative **Confirm email** para entrar logo após criar a conta.
 
-### 4. Usar o app
+## Fluxo de peso
 
-1. Abra o site
-2. **Criar conta** (e-mail + senha)
-3. **Entrar** e usar o PDV
+- Quantidade vendida/estoque: **gramas** (ex.: 385 g)
+- Preço do sabor: **R$ / kg** (total = gramas ÷ 1000 × preço/kg)
+- Balança USB: conversão automática kg → g
 
-## O que já funciona
+## Balança
 
-- Login / criar conta / sair
-- Caixa (abrir / fechar)
-- Venda por **kg** + itens por unidade
-- Estoque, compras, relatório do dia
-- Sync dos dados por usuário no Supabase (`app_state`)
-
-## Desenvolvimento local
-
-```bash
-npx serve .
-```
-
-Configuração em `assets/js/config.js` (URL + chave publishable).
-
-## Balança (USB)
-
-No PC do caixa (Chrome/Edge):
-
-1. Aba **Balança** → escolha protocolo (comece em **Automático**) e baud (muitas usam **9600**)
-2. **Conectar balança (USB)** e autorize a porta
-3. Na venda por kg, o peso aparece ao vivo; use **Usar peso da balança**
-
-Também lê **código de barras de peso** (etiqueta) no diálogo de peso.
-
-**Limite:** não cobre 100% das balanças (USB proprietário/HID puro pode falhar). A maioria com USB–serial funciona.
+Chrome/Edge no PC → aba **Balança** → Conectar USB → na venda o peso entra em gramas.
 
 ## Licença
 
