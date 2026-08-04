@@ -16,13 +16,14 @@
   --danger: #b42318;
   --shadow: 0 18px 50px rgba(14, 55, 70, 0.1);
   --radius: 18px;
-  --font: "Atkinson Hyperlegible", sans-serif;
+  --font: "Figtree", sans-serif;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+  font-family: var(--font) !important;
 }
 
 html {
@@ -51,14 +52,21 @@ pre,
 .dialog h3,
 .login-card h2,
 .receipt,
-.receipt * {
+.receipt *,
+.badge,
+.muted,
+.empty,
+.product-tile,
+.cart-item,
+.session-pill {
   font-family: var(--font) !important;
 }
 
 body {
   color: var(--ink);
   font-size: 1rem;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "kern" 1, "liga" 1;
   background:
     radial-gradient(1200px 600px at 10% -10%, #c9f0ea 0%, transparent 55%),
     radial-gradient(900px 500px at 100% 0%, #ffd6e4 0%, transparent 50%),
@@ -71,7 +79,9 @@ input,
 select,
 textarea {
   font: inherit;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font) !important;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "kern" 1, "liga" 1;
 }
 
 button {
@@ -852,8 +862,9 @@ body:not(.role-owner) .owner-only {
 }
 
 @media print {
-  body * {
-    font-family: "Atkinson Hyperlegible", sans-serif !important;
+  body *,
+  * {
+    font-family: "Figtree", sans-serif !important;
   }
 }
 

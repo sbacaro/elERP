@@ -62,9 +62,9 @@
     if (!win) throw new Error("POPUP_BLOCKED");
     win.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
       <title>Cupom</title>
-      <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap" rel="stylesheet" />
       <style>
-        * { font-family: "Atkinson Hyperlegible", sans-serif !important; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+        * { font-family: "Figtree", sans-serif !important; font-variant-numeric: lining-nums tabular-nums; box-sizing: border-box; }
         body { margin: 0; padding: 12px; color: #14212b; }
         .receipt { width: 280px; margin: 0 auto; font-size: 13px; }
         .r-center { text-align: center; }

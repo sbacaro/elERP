@@ -3,7 +3,7 @@
 PDV para açaí/sorvete — venda por **gramas/kg**, preço do sabor por **kg**, GitHub Pages + Supabase.
 
 **Idioma:** português do Brasil (pt-BR).  
-**Fonte única:** Atkinson Hyperlegible (texto e números).
+**Fonte única:** Figtree (texto e números — sem zero cortado).
 
 ## Site
 
