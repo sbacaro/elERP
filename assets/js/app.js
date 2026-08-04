@@ -30,9 +30,15 @@ const ui = {
   toastEl: document.getElementById("toast"),
   sessionPill: document.getElementById("sessionPill"),
   panels: [...document.querySelectorAll(".panel")],
-  navButtons: [...document.querySelectorAll(".nav button[data-panel]")],
   currentPanel: "panel-pos",
 };
+
+function navButtons() {
+  // Requery live — avoids empty NodeList if HTML/SW versions briefly disagree.
+  return [...document.querySelectorAll(".nav button[data-panel], button[data-panel]")].filter(
+    (btn, i, arr) => arr.indexOf(btn) === i
+  );
+}
 
 function toast(message, isError = false) {
   if (!ui.toastEl) return;
@@ -114,7 +120,7 @@ function applyStaticLabels() {
     "panel-store": t.nav.store,
     "panel-team": t.nav.team,
   };
-  ui.navButtons.forEach((btn) => {
+  navButtons().forEach((btn) => {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
   });
   const sectionLabels = {
@@ -127,6 +133,10 @@ function applyStaticLabels() {
   Object.entries(sectionLabels).forEach(([id, label]) => {
     const el = document.getElementById(id);
     if (el) el.textContent = label;
+  });
+  // Compat: se SW antigo ainda mostrar o seletor Operação/Gestão, rotula os botões.
+  document.querySelectorAll(".area-switch button[data-area]").forEach((btn) => {
+    btn.textContent = btn.dataset.area === "mgmt" ? t.nav.catalog : t.nav.ops;
   });
 
   setText("#labelFlavors", t.flavorsAndItems);
@@ -261,8 +271,9 @@ function switchPanel(id) {
   }
   ui.currentPanel = id;
   document.body.dataset.panel = id;
+  if (!ui.panels.length) ui.panels = [...document.querySelectorAll(".panel")];
   ui.panels.forEach((p) => p.classList.toggle("active", p.id === id));
-  ui.navButtons.forEach((b) => {
+  navButtons().forEach((b) => {
     b.setAttribute("aria-current", b.dataset.panel === id ? "page" : "false");
   });
   if (id === "panel-pos") renderPos();
@@ -306,6 +317,7 @@ function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm, 
       panel?.classList.remove("dialog-wide");
       confirmBtn.onclick = null;
       cancelBtn.onclick = null;
+      backdrop.onclick = null;
       backdrop.onkeydown = null;
       if (result instanceof Error) reject(result);
       else resolve(result);
@@ -322,6 +334,9 @@ function openDialog(title, bodyHtml, onConfirm, confirmLabel = t.dialogConfirm, 
 
     cancelBtn.onclick = () => close(null);
     confirmBtn.onclick = submit;
+    backdrop.onclick = (e) => {
+      if (e.target === backdrop) close(null);
+    };
     backdrop.onkeydown = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -1910,8 +1925,21 @@ function readPrinterFormConfig() {
 }
 
 function bindEvents() {
-  ui.navButtons.forEach((btn) => {
-    btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
+  // Delegação: sobrevive a HTML antigo/novo e re-render sem rebind.
+  const navRoot = document.querySelector(".nav-shell") || document.body;
+  navRoot.addEventListener("click", (e) => {
+    const panelBtn = e.target.closest("button[data-panel]");
+    if (panelBtn && navRoot.contains(panelBtn)) {
+      e.preventDefault();
+      switchPanel(panelBtn.dataset.panel);
+      return;
+    }
+    const areaBtn = e.target.closest("button[data-area]");
+    if (areaBtn && navRoot.contains(areaBtn)) {
+      e.preventDefault();
+      const area = areaBtn.dataset.area;
+      switchPanel(area === "mgmt" ? "panel-products" : "panel-pos");
+    }
   });
 
   document.getElementById("btnOpenCash").addEventListener("click", openCashSession);
@@ -2153,17 +2181,22 @@ function bindEvents() {
 
 function init() {
   document.documentElement.lang = "pt-BR";
+  // Auth primeiro: se bindEvents falhar, Entrar/Criar conta ainda respondem.
+  try {
+    bindAuth();
+  } catch (error) {
+    console.error(error);
+  }
   try {
     applyStaticLabels();
     bindEvents();
-    bindAuth();
     setAppVisible(false);
     bootAuth();
   } catch (error) {
     console.error(error);
     const msg = document.getElementById("loginMessage");
     if (msg) {
-      msg.textContent = "Erro ao iniciar a interface. Atualize a página.";
+      msg.textContent = "Erro ao iniciar a interface. Atualize a página (Ctrl+Shift+R).";
       msg.classList.add("error");
     }
     setAppVisible(false);
