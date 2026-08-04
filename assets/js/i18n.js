@@ -4,9 +4,7 @@ const LOCALE = "pt-BR";
 
 const t = {
   locale: LOCALE,
-
   brandSubtitle: "PDV para açaí e sorvete por grama · estoque · caixa · compras",
-
   loginTitle: "Entrar no elERP",
   loginSubtitle: "Use seu e-mail e senha para acessar o PDV na nuvem.",
   email: "E-mail",
@@ -24,7 +22,7 @@ const t = {
   syncError: "Não foi possível salvar na nuvem.",
   loadError: "Não foi possível carregar seus dados.",
   schemaMissing:
-    "Schema ainda não criado no Supabase. Rode supabase/full_schema.sql (e catalog_bebidas_br.sql) no SQL Editor.",
+    "Schema incompleto no Supabase. Rode full_schema.sql e depois extend_complete.sql no SQL Editor.",
 
   nav: {
     ops: "Operação",
@@ -32,9 +30,14 @@ const t = {
     pos: "Caixa",
     products: "Produtos",
     purchases: "Compras",
-    day: "Dia",
+    day: "Dia / Relatórios",
     scale: "Balança",
     catalog: "Catálogo",
+    store: "Loja",
+    team: "Equipe",
+    suppliers: "Fornecedores",
+    inventory: "Inventário",
+    printers: "Impressoras",
   },
 
   sessionOpen: (floatLabel) => `Caixa aberto · fundo ${floatLabel}`,
@@ -43,7 +46,7 @@ const t = {
   closeCash: "Fechar caixa",
   openCashNow: "Abrir caixa agora",
   cashClosedTitle: "Caixa fechado",
-  cashClosedHelp: "Abra o turno para registrar vendas em gramas e controlar o fundo de troco.",
+  cashClosedHelp: "Abra o turno para registrar vendas e controlar o fundo de troco.",
 
   flavorsAndItems: "Sabores e itens",
   searchPlaceholder: "Buscar...",
@@ -53,14 +56,18 @@ const t = {
   remove: "remover",
   total: "Total",
   payment: "Pagamento",
-  amountPaid: "Valor pago",
+  amountPaid: "Valor",
+  addPayment: "Adicionar pagamento",
+  payments: "Pagamentos",
+  change: "Troco",
   finishSale: "Finalizar venda",
+  printReceipt: "Imprimir cupom",
+  receiptTitle: "Cupom não fiscal",
+  offlinePending: (n) => `${n} venda(s) aguardando sincronização`,
+  offlineSynced: "Vendas offline sincronizadas",
+  offlineQueued: "Sem conexão — venda guardada para sincronizar",
 
-  payMethods: {
-    dinheiro: "Dinheiro",
-    pix: "Pix",
-    cartao: "Cartão",
-  },
+  payMethods: { dinheiro: "Dinheiro", pix: "Pix", cartao: "Cartão" },
 
   productsTitle: "Produtos e estoque",
   newProduct: "Novo produto",
@@ -72,6 +79,12 @@ const t = {
   colStock: "Estoque",
   colStatus: "Situação",
   edit: "editar",
+  addons: "Complementos",
+  manageAddons: "Complementos",
+  addonName: "Complemento",
+  addonPrice: "Preço do complemento",
+  addAddon: "Adicionar complemento",
+  selectAddons: "Complementos",
   active: "ativo",
   inactive: "inativo",
   lowStock: "mín.",
@@ -98,13 +111,18 @@ const t = {
   confirmReceive: "Confirmar recebimento",
   receiptDone: "Recebimento registrado",
   remaining: (qtyLabel) => `falta ${qtyLabel}`,
-  purchaseHint: "Por enquanto: um item por pedido. Depois ampliamos para vários itens.",
+  purchaseHint: "Adicione quantas linhas quiser no pedido.",
+  addLine: "Adicionar item",
   qty: "Quantidade",
   unitCost: "Custo unitário",
   note: "Observação",
   optional: "opcional",
   product: "Produto",
   supplier: "Fornecedor",
+  newSupplier: "Novo fornecedor",
+  supplierSaved: "Fornecedor salvo",
+  suppliersTitle: "Fornecedores",
+  phone: "Telefone",
 
   poStatus: {
     draft: "rascunho",
@@ -115,6 +133,14 @@ const t = {
   },
 
   dayTitle: "Turno",
+  reportsTitle: "Relatórios",
+  periodToday: "Hoje",
+  period7: "7 dias",
+  periodMonth: "Mês",
+  periodCustom: "Personalizado",
+  exportCsv: "Exportar CSV",
+  margin: "Margem",
+  costTotal: "Custo",
   lastClose: (expected, counted, diff) =>
     `Último fechamento: esperado ${expected}, contado ${counted}, diferença ${diff}.`,
   noSessionYet: "Nenhum caixa aberto. Abra um turno para começar a vender.",
@@ -138,10 +164,8 @@ const t = {
   openingFloat: "Fundo de troco (R$)",
   open: "Abrir",
   cashOpened: "Caixa aberto",
-
   closeCashTitle: "Fechar o dia / caixa",
-  expectedCash: (value) =>
-    `Esperado em dinheiro: ${value} (fundo + vendas em dinheiro).`,
+  expectedCash: (value) => `Esperado em dinheiro: ${value} (fundo + vendas em dinheiro − troco).`,
   countedCash: "Valor contado em dinheiro",
   closeConfirm: "Fechar caixa",
   cashClosedToast: (diff) => `Caixa fechado · diferença ${diff}`,
@@ -162,7 +186,6 @@ const t = {
   minStockIn: (unit) => `Estoque mínimo (${unit})`,
   add: "Adicionar",
   stockLowShort: "baixo",
-  readScale: "Ler balança",
   useScaleWeight: "Usar peso da balança",
   scaleLive: "Leitura ao vivo",
   scaleStable: "estável",
@@ -175,37 +198,75 @@ const t = {
   scaleConnected: "Balança conectada",
   scaleTitle: "Balança de balcão",
   scaleHelp:
-    "Produtos em g ou kg usam preço por kg. A balança USB costuma enviar kg; no PDV você pode vender em g ou kg conforme o cadastro do produto.",
+    "Produtos em g ou kg usam preço por kg. A balança USB costuma enviar kg; o PDV respeita a unidade do cadastro.",
   scaleProtocol: "Protocolo",
   scaleBaud: "Velocidade (baud)",
   scaleSave: "Salvar configuração",
   scaleSaved: "Configuração da balança salva",
   scaleLast: "Última leitura",
   scaleNone: "Nenhuma leitura ainda",
-  scaleHintBarcode: "Se a balança imprime etiqueta com código, leia com o scanner neste diálogo (peso em g).",
+  scaleHintBarcode: "Se a balança imprime etiqueta com código, leia com o scanner neste diálogo.",
   scaleError: "Erro na balança",
   scalePermissionDenied: "Permissão da porta USB negada ou cancelada.",
 
   catalogTitle: "Catálogo de bebidas (códigos de barras)",
   catalogHelp:
-    "Base Brasil (Open Food Facts + itens curados): águas, refrigerantes, sucos, chás e energéticos. Busque e importe para a sua loja.",
+    "Base Brasil (Open Food Facts + itens curados). Busque e importe para a sua loja.",
   catalogSearch: "Buscar nome ou código de barras",
-  catalogGroup: "Categoria",
   catalogAll: "Todas",
   catalogImport: "Importar",
   catalogImported: "Produto importado para a loja",
   catalogEmpty: "Nenhum item encontrado.",
   catalogCount: (n, source) => `${n} itens · fonte: ${source}`,
-  catalogLoadError: "Não foi possível carregar o catálogo.",
   catalogBarcode: "Código",
-  catalogPriceHint: "Preço sugerido",
   posBarcodeHint: "Escaneie ou digite um código de barras e pressione Enter",
+
+  storeTitle: "Dados da loja",
+  storeHelp: "Usados no cupom não fiscal. NFC-e real fica para integração futura com provedor.",
+  tradeName: "Nome fantasia",
+  legalName: "Razão social",
+  cnpj: "CNPJ",
+  ie: "Inscrição estadual",
+  address: "Endereço",
+  city: "Cidade",
+  state: "UF",
+  zip: "CEP",
+  receiptMessage: "Mensagem do cupom",
+  fiscalMode: "Modo fiscal",
+  fiscalNaoFiscal: "Cupom não fiscal",
+  fiscalNfceFuture: "NFC-e (scaffold / futuro)",
+  cscId: "CSC ID (futuro)",
+  cscToken: "CSC token (futuro)",
+  storeSaved: "Dados da loja salvos",
+
+  teamTitle: "Equipe",
+  teamHelp: "Owner vê tudo. Manager acessa gestão. Cashier só operação.",
+  role: "Papel",
+  roles: { owner: "Dono", manager: "Gerente", cashier: "Caixa" },
+  addMember: "Adicionar membro",
+  memberSaved: "Membro salvo",
+  memberRemoved: "Membro removido",
+
+  inventoryTitle: "Inventário",
+  inventoryHelp: "Ajuste o estoque físico. Gera movimento do tipo ajuste.",
+  adjust: "Ajustar",
+  adjustStock: "Ajuste de estoque",
+  qtyDelta: "Diferença (+/-)",
+  stockAdjusted: "Estoque ajustado",
+
+  printersTitle: "Impressoras",
+  printersHelp:
+    "Suporte a térmicas ESC/POS (Epson, Bematech, Elgin, Daruma, Sweda, Tanca…), ECF legado e SAT/MFe via bridge local. No navegador puro use USB Serial (Chrome) ou a impressão do sistema.",
+  printerSaved: "Impressora salva neste computador",
+  printerTestOk: "Teste enviado à impressora",
+  printerConnected: "Porta USB/serial conectada",
+  printerSerialUnsupported: "Web Serial exige Chrome/Edge em HTTPS.",
+  printerBridgeHint: "Bridge de rede: serviço local que recebe bytes ESC/POS (porta 9100). Bridge fiscal: ACBr Monitor / wrapper das DLLs (BemaFI32, Daruma…).",
+  printerStatus: "Situação da impressora",
 
   dialogCancel: "Cancelar",
   dialogConfirm: "Confirmar",
-
   footerStorage: "Dados na sua conta Supabase",
-
   saleRegistered: (total) => `Venda ${total} registrada`,
   stockInsufficient: "Estoque insuficiente.",
 
@@ -222,6 +283,9 @@ const t = {
     invalidCartProduct: "Produto inválido no carrinho.",
     paymentMismatch: "Pagamento diferente do total da venda.",
     payMustMatchTotal: "Ajuste o valor pago para fechar exatamente o total.",
+    paymentInsufficient: "Pagamentos abaixo do total da venda.",
+    nonCashOverpay: "Pix/cartão não podem ultrapassar o total.",
+    changeNeedsCash: "Troco exige valor em dinheiro suficiente.",
     saleNotFound: "Venda não encontrada.",
     cancelOnlyOpen: "Só é possível cancelar venda do caixa aberto.",
     orderNeedsItems: "Informe itens no pedido.",
@@ -231,18 +295,27 @@ const t = {
     orderAlreadyProcessed: "Pedido já foi enviado/recebido.",
     orderCannotReceive: "Pedido não pode ser recebido.",
     nothingReceived: "Nenhuma quantidade recebida.",
-    invalidWeight: "Informe o peso em gramas (ex.: 385).",
+    invalidWeight: "Informe um peso válido.",
+    forbidden: "Sem permissão para esta ação.",
+    invalidEmail: "Informe um e-mail válido.",
+    cannotAddOwner: "O dono é criado automaticamente.",
+    cannotRemoveOwner: "Não é possível remover o dono.",
+    popupBlocked: "Permita pop-ups para imprimir o cupom.",
+    printerError: "Falha ao imprimir. Verifique a impressora ou o bridge local.",
+    serialUnsupported: "USB/Serial não suportado neste navegador.",
+    btUnsupported: "Bluetooth não suportado neste navegador.",
   },
 };
 
 function payMethodLabel(method) {
   return t.payMethods[method] || method;
 }
-
 function poStatusLabel(status) {
   return t.poStatus[status] || status;
 }
+function roleLabel(role) {
+  return t.roles[role] || role;
+}
 
-window.elERPLocale = { t, payMethodLabel, poStatusLabel, LOCALE };
-
+window.elERPLocale = { t, payMethodLabel, poStatusLabel, roleLabel, LOCALE };
 })();

@@ -1,68 +1,86 @@
 # elERP
 
-PDV para açaí/sorvete — venda por **gramas**, preço do sabor por **kg**, GitHub Pages + Supabase.
+PDV para açaí/sorvete — venda por **gramas/kg**, preço do sabor por **kg**, GitHub Pages + Supabase.
 
-**Idioma:** português do Brasil (pt-BR).
+**Idioma:** português do Brasil (pt-BR).  
+**Fonte única:** Atkinson Hyperlegible (texto e números).
 
 ## Site
 
 https://sbacaro.github.io/elERP/
 
-## Setup do Supabase (obrigatório uma vez)
+## Setup do Supabase (obrigatório)
 
 Projeto: `https://jdkggegrreixywoyhkmb.supabase.co`
 
-### 1. Tabelas (fonte da verdade)
-
 1. Abra o [SQL Editor](https://supabase.com/dashboard/project/jdkggegrreixywoyhkmb/sql/new)
 2. Rode **`supabase/full_schema.sql`** — produtos, caixa, vendas, estoque, compras + RLS + Realtime
-3. Rode **`supabase/catalog_bebidas_br.sql`** — catálogo de ~420 bebidas BR (`product_catalog`)
+3. Rode **`supabase/extend_complete.sql`** — loja, equipe, complementos, troco
+4. Rode **`supabase/catalog_bebidas_br.sql`** — catálogo de bebidas (`product_catalog`)
 
-After isso, o app lê e grava só no Supabase. Alterações no Dashboard refletem no site (Realtime), e o que você cadastra no site aparece nas tabelas.
+Se a loja já existia sem `kg`, rode também `supabase/alter_unit_kg.sql`.
 
-Se a loja já existia **sem** a unidade `kg`, rode também `supabase/alter_unit_kg.sql` (ou rode de novo o final de `full_schema.sql`).
-
-> `supabase/schema.sql` é legado (`app_state` jsonb). Use só se precisar migrar dados antigos; o app novo usa as tabelas normalizadas.
-
-### 2. URLs de autenticação
+### Auth
 
 Em **Authentication → URL Configuration**:
 
 - **Site URL:** `https://sbacaro.github.io/elERP/`
 - **Redirect URLs:** `https://sbacaro.github.io/elERP/**`
 
-### 3. Confirmar e-mail
+Em **Authentication → Providers → Email**, desative **Confirm email** se quiser entrar logo após criar a conta.
 
-Em **Authentication → Providers → Email**, desative **Confirm email** para entrar logo após criar a conta.
+## Áreas do app
 
-## Dados da loja
+| Área | Telas |
+|------|--------|
+| **Operação** | Caixa (PDV), Dia / Relatórios |
+| **Gestão** | Produtos (+ complementos), Inventário, Compras, Fornecedores, Catálogo, Balança, Loja*, Equipe* |
 
-| Tabela | Conteúdo |
-|--------|----------|
-| `store_products` | Produtos da loja (sem seed hardcoded no app) |
-| `cash_sessions` | Abertura/fechamento de caixa |
-| `sales` / `sale_items` / `sale_payments` | Vendas |
-| `stock_movements` | Movimentos de estoque |
-| `purchase_orders` / `purchase_order_items` | Pedidos de compra |
-| `store_suppliers` | Fornecedores |
-| `product_catalog` | Catálogo de barras para importar |
+\* Loja e Equipe só para o papel **owner**. Cashier vê só Operação.
 
-Carrinho do PDV fica só no navegador (localStorage) até confirmar a venda.
+## Impressoras (Brasil)
 
-## Catálogo de códigos (Open Food Facts)
+Gestão → **Impressoras** configura o dispositivo deste computador (localStorage).
 
-Fonte: [Open Food Facts](https://world.openfoodfacts.org/data) (Brasil) + códigos curados.
+| Tipo | Como imprime no Pages |
+|------|------------------------|
+| Não fiscal ESC/POS (Epson, Bematech, Elgin, Daruma, Sweda, Tanca, Gertec…) | USB/Serial (Chrome Web Serial), Bluetooth (limitado), bridge HTTP raw, ou diálogo do navegador |
+| ECF legado | Bridge fiscal local (DLL/ACBr Monitor) — o browser não fala com a DLL diretamente |
+| SAT / MFe | Bridge fiscal + extrato térmico opcional |
+| NFC-e | DANFE no navegador ou térmico ESC/POS |
 
-- Preferência: tabela `product_catalog` no Supabase
-- Fallback: `data/catalog-bebidas-br.json` no Pages
+Bridge de rede esperado: `POST` bytes em `Content-Type: application/octet-stream` (ex. `http://127.0.0.1:9100/print`).  
+Bridge fiscal: `POST` JSON em `/fiscal` com `{ type, printerId, sale, settings }`.
 
-No app: aba **Catálogo** → buscar → **Importar**. No caixa: código de barras + Enter.
+## O que já está no PDV
 
-## Fluxo de peso
+- Venda g / kg / un, complementos, pagamentos múltiplos (dinheiro/Pix/cartão) com **troco**
+- Cupom **não fiscal** imprimível (dados da loja)
+- Caixa abrir/fechar, cancelamento de venda no turno
+- Estoque, inventário (ajuste), compras multi-item, fornecedores
+- Relatórios por período + export CSV
+- Balança USB (Web Serial), catálogo de bebidas
+- Offline leve: fila IndexedDB + Service Worker (assets)
+- Realtime Supabase
 
-- Quantidade: **gramas**
-- Preço do sabor: **R$ / kg**
-- Balança USB: converte kg → g
+## Fiscal (scaffold)
+
+Cadastro de CNPJ/IE/CSC e modo `nao_fiscal` | `nfce_futuro`.  
+Vendas gravam `fiscal_status` = `nao_fiscal` ou `pendente_nfce`.  
+**Não há emissão NFC-e real neste ciclo** (precisa provedor + certificado A1).
+
+## Fora do escopo atual
+
+- NFC-e/SAT real, TEF/pinpad, multi-loja, delivery/CRM
+
+## Checklist rápido após o SQL
+
+1. Hard refresh no site
+2. Criar/entrar na conta
+3. Gestão → Loja: preencher nome/CNPJ
+4. Gestão → Produtos: cadastrar sabor + complementos
+5. Operação → Abrir caixa → vender com Pix+dinheiro e troco → imprimir cupom
+6. Dia / Relatórios → exportar CSV
 
 ## Licença
 

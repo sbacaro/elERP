@@ -4,7 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="elERP — PDV para sorveteria por quilo" />
+    <meta name="theme-color" content="#0a5554" />
     <title>elERP · PDV açaí por grama</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,6 +16,8 @@
     <link rel="stylesheet" href="./assets/css/app.css" />
   </head>
   <body>
+    <div id="offlineBanner" class="offline-banner is-hidden" hidden></div>
+
     <section class="login-screen" id="loginScreen">
       <div class="login-card card">
         <div class="brand">
@@ -35,9 +39,7 @@
             <button type="submit" class="btn" id="btnLogin">Entrar</button>
             <button type="button" class="btn btn-secondary" id="btnSignup">Criar conta</button>
           </div>
-          <p class="muted login-hint" id="loginHint">
-            Primeira vez? Crie uma conta com o mesmo formulário.
-          </p>
+          <p class="muted login-hint" id="loginHint">Primeira vez? Crie uma conta com o mesmo formulário.</p>
         </form>
       </div>
     </section>
@@ -64,19 +66,24 @@
       <div class="nav-shell">
         <nav class="area-switch" aria-label="Áreas do app">
           <button type="button" data-area="ops" aria-current="page" id="areaOpsBtn">Operação</button>
-          <button type="button" data-area="mgmt" id="areaMgmtBtn">Gestão</button>
+          <button type="button" data-area="mgmt" id="areaMgmtBtn" class="mgmt-only">Gestão</button>
         </nav>
 
         <nav class="nav nav-group" id="navOps" data-area="ops" aria-label="Operação">
           <button type="button" data-panel="panel-pos" aria-current="page">Caixa</button>
-          <button type="button" data-panel="panel-day">Dia</button>
+          <button type="button" data-panel="panel-day">Dia / Relatórios</button>
         </nav>
 
-        <nav class="nav nav-group is-hidden" id="navMgmt" data-area="mgmt" aria-label="Gestão" hidden>
+        <nav class="nav nav-group is-hidden mgmt-only" id="navMgmt" data-area="mgmt" aria-label="Gestão" hidden>
           <button type="button" data-panel="panel-products">Produtos</button>
+          <button type="button" data-panel="panel-inventory">Inventário</button>
           <button type="button" data-panel="panel-purchases">Compras</button>
+          <button type="button" data-panel="panel-suppliers">Fornecedores</button>
           <button type="button" data-panel="panel-catalog">Catálogo</button>
           <button type="button" data-panel="panel-scale">Balança</button>
+          <button type="button" data-panel="panel-printers">Impressoras</button>
+          <button type="button" data-panel="panel-store" class="owner-only">Loja</button>
+          <button type="button" data-panel="panel-team" class="owner-only">Equipe</button>
         </nav>
       </div>
 
@@ -84,7 +91,7 @@
         <section class="panel active" id="panel-pos">
           <div class="card" id="posGate">
             <h2>Caixa fechado</h2>
-            <p class="muted">Abra o turno para registrar vendas em gramas e controlar o fundo de troco.</p>
+            <p class="muted">Abra o turno para registrar vendas e controlar o fundo de troco.</p>
             <button type="button" class="btn" id="btnOpenCashFromPos">Abrir caixa agora</button>
           </div>
 
@@ -95,19 +102,8 @@
                   <h2 id="labelFlavors">Sabores e itens</h2>
                 </div>
                 <div class="toolbar">
-                  <input
-                    id="productSearch"
-                    class="control"
-                    type="search"
-                    placeholder="Buscar..."
-                  />
-                  <input
-                    id="posBarcode"
-                    class="control"
-                    type="text"
-                    inputmode="numeric"
-                    placeholder="Código de barras + Enter"
-                  />
+                  <input id="productSearch" class="control" type="search" placeholder="Buscar..." />
+                  <input id="posBarcode" class="control" type="text" inputmode="numeric" placeholder="Código de barras + Enter" />
                 </div>
                 <div class="product-grid" id="productGrid"></div>
               </div>
@@ -123,20 +119,9 @@
                   <strong id="cartTotal">R$&nbsp;0,00</strong>
                 </div>
                 <div class="form-stack">
-                  <div class="pay-row">
-                    <div class="field">
-                      <label for="payMethod">Pagamento</label>
-                      <select id="payMethod" class="control">
-                        <option value="dinheiro">Dinheiro</option>
-                        <option value="pix">Pix</option>
-                        <option value="cartao">Cartão</option>
-                      </select>
-                    </div>
-                    <div class="field">
-                      <label for="payAmount">Valor pago</label>
-                      <input id="payAmount" class="control" type="number" min="0" step="0.01" />
-                    </div>
-                  </div>
+                  <div id="payLines" class="form-stack"></div>
+                  <button type="button" class="btn btn-secondary btn-sm" id="btnAddPay">Adicionar pagamento</button>
+                  <p class="field-hint" id="payChangeHint"></p>
                   <button type="button" class="btn btn-block" id="btnCheckout">Finalizar venda</button>
                 </div>
               </div>
@@ -154,16 +139,25 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Nome</th>
-                    <th>Un.</th>
-                    <th>Preço</th>
-                    <th>Custo</th>
-                    <th>Estoque</th>
-                    <th>Situação</th>
-                    <th></th>
+                    <th>Nome</th><th>Un.</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Situação</th><th></th>
                   </tr>
                 </thead>
                 <tbody id="productsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-inventory">
+          <div class="card">
+            <div class="card-head"><h2 id="labelInventory">Inventário</h2></div>
+            <p class="muted" id="inventoryHelp">Ajuste o estoque físico. Gera movimento do tipo ajuste.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Produto</th><th>Un.</th><th>Estoque</th><th>Mín.</th><th></th></tr>
+                </thead>
+                <tbody id="inventoryBody"></tbody>
               </table>
             </div>
           </div>
@@ -175,22 +169,32 @@
               <h2 id="labelPurchases">Pedidos de compra</h2>
               <button type="button" class="btn" id="btnNewPurchase">Novo pedido</button>
             </div>
-            <p class="muted" id="purchasesHelp">
-              Fluxo: criar → marcar como enviado → receber (entra no estoque).
-            </p>
+            <p class="muted" id="purchasesHelp">Fluxo: criar → marcar como enviado → receber (entra no estoque).</p>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Criado</th>
-                    <th>Fornecedor</th>
-                    <th>Situação</th>
-                    <th>Itens</th>
-                    <th>Total custo</th>
-                    <th></th>
+                    <th>Criado</th><th>Fornecedor</th><th>Situação</th><th>Itens</th><th>Total custo</th><th></th>
                   </tr>
                 </thead>
                 <tbody id="purchasesBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-suppliers">
+          <div class="card">
+            <div class="card-head">
+              <h2 id="labelSuppliers">Fornecedores</h2>
+              <button type="button" class="btn" id="btnNewSupplier">Novo fornecedor</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Nome</th><th>Telefone</th><th></th></tr>
+                </thead>
+                <tbody id="suppliersBody"></tbody>
               </table>
             </div>
           </div>
@@ -201,17 +205,27 @@
             <h2>Turno</h2>
             <p class="muted" id="dayClosedHint"></p>
           </div>
+          <div class="card stack-gap">
+            <div class="card-head"><h2 id="labelReports">Relatórios</h2></div>
+            <div class="toolbar">
+              <select id="reportPeriod" class="control control-narrow">
+                <option value="today">Hoje</option>
+                <option value="7">7 dias</option>
+                <option value="month">Mês</option>
+                <option value="session">Turno atual / último</option>
+              </select>
+              <button type="button" class="btn btn-secondary" id="btnExportCsv">Exportar CSV</button>
+            </div>
+            <div id="periodReport"></div>
+          </div>
           <div id="dayReport"></div>
         </section>
 
         <section class="panel" id="panel-scale">
           <div class="card">
-            <div class="card-head">
-              <h2 id="labelScale">Balança de balcão</h2>
-            </div>
+            <div class="card-head"><h2 id="labelScale">Balança de balcão</h2></div>
             <p class="muted" id="scaleHelp"></p>
             <p id="scaleSupportNote" class="muted"></p>
-
             <div class="field-row">
               <div class="field">
                 <label id="labelScaleProtocol" for="scaleProtocol">Protocolo</label>
@@ -222,65 +236,177 @@
                 <select id="scaleBaud" class="control"></select>
               </div>
             </div>
-
             <div class="toolbar">
               <button type="button" class="btn" id="btnScaleConnect">Conectar balança (USB)</button>
               <button type="button" class="btn btn-secondary" id="btnScaleDisconnect">Desconectar</button>
               <button type="button" class="btn btn-ghost" id="btnScaleSave">Salvar configuração</button>
             </div>
-
             <div class="stats">
-              <div class="stat">
-                <label id="labelScaleStatus">Situação</label>
-                <strong id="scaleStatusText">—</strong>
-              </div>
-              <div class="stat">
-                <label id="labelScaleLast">Última leitura</label>
-                <strong id="scaleLastText">—</strong>
-              </div>
+              <div class="stat"><label id="labelScaleStatus">Situação</label><strong id="scaleStatusText">—</strong></div>
+              <div class="stat"><label id="labelScaleLast">Última leitura</label><strong id="scaleLastText">—</strong></div>
             </div>
             <p id="scaleRawText" class="muted scale-raw"></p>
           </div>
         </section>
 
+        <section class="panel" id="panel-printers">
+          <div class="card">
+            <div class="card-head"><h2 id="labelPrinters">Impressoras</h2></div>
+            <p class="muted" id="printersHelp"></p>
+            <form id="printerForm" class="form-stack">
+              <div class="field">
+                <label for="prKind">Tipo</label>
+                <select id="prKind" class="control">
+                  <option value="">Todos</option>
+                  <option value="nonfiscal">Não fiscal</option>
+                  <option value="fiscal_ecf">Fiscal ECF (legado)</option>
+                  <option value="sat">SAT / MFe</option>
+                  <option value="nfce_printer">NFC-e</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="prModel">Modelo</label>
+                <select id="prModel" class="control"></select>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="prConn">Conexão</label>
+                  <select id="prConn" class="control"></select>
+                </div>
+                <div class="field">
+                  <label for="prPaper">Papel (mm)</label>
+                  <select id="prPaper" class="control">
+                    <option value="58">58</option>
+                    <option value="80">80</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="prBaud">Baud (USB/serial)</label>
+                  <select id="prBaud" class="control">
+                    <option value="9600">9600</option>
+                    <option value="19200">19200</option>
+                    <option value="38400">38400</option>
+                    <option value="115200">115200</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="prDrawer">Gaveta de dinheiro</label>
+                  <select id="prDrawer" class="control">
+                    <option value="0">Não abrir</option>
+                    <option value="1">Abrir ao imprimir</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label for="prBridge">URL bridge rede (ESC/POS raw)</label>
+                <input id="prBridge" class="control" placeholder="http://127.0.0.1:9100/print" />
+              </div>
+              <div class="field">
+                <label for="prFiscalBridge">URL bridge fiscal (ECF/SAT/DLL)</label>
+                <input id="prFiscalBridge" class="control" placeholder="http://127.0.0.1:3434/fiscal" />
+              </div>
+              <div class="field">
+                <label for="prAuto">Após a venda</label>
+                <select id="prAuto" class="control">
+                  <option value="1">Imprimir automaticamente</option>
+                  <option value="0">Só sob demanda</option>
+                </select>
+              </div>
+              <div class="toolbar">
+                <button type="submit" class="btn" id="btnPrinterSave">Salvar impressora</button>
+                <button type="button" class="btn btn-secondary" id="btnPrinterConnect">Conectar USB/Serial</button>
+                <button type="button" class="btn btn-ghost" id="btnPrinterTest">Teste de impressão</button>
+              </div>
+              <p class="field-hint" id="printerStatusText"></p>
+            </form>
+            <div class="table-wrap" style="margin-top:1rem">
+              <table>
+                <thead>
+                  <tr><th>Marca</th><th>Modelo</th><th>Tipo</th><th>Protocolo</th></tr>
+                </thead>
+                <tbody id="printerCatalogBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <section class="panel" id="panel-catalog">
           <div class="card">
-            <div class="card-head">
-              <h2 id="labelCatalog">Catálogo de bebidas</h2>
-            </div>
+            <div class="card-head"><h2 id="labelCatalog">Catálogo de bebidas</h2></div>
             <p class="muted" id="catalogHelp"></p>
             <p class="muted" id="catalogMeta"></p>
             <div class="toolbar">
-              <input
-                id="catalogSearch"
-                class="control"
-                type="search"
-                placeholder="Buscar nome ou código..."
-              />
+              <input id="catalogSearch" class="control" type="search" placeholder="Buscar nome ou código..." />
               <select id="catalogGroup" class="control control-narrow"></select>
             </div>
             <div class="table-wrap">
               <table>
                 <thead>
-                  <tr>
-                    <th>Código</th>
-                    <th>Nome</th>
-                    <th>Categoria</th>
-                    <th>Qtd</th>
-                    <th>Preço sug.</th>
-                    <th></th>
-                  </tr>
+                  <tr><th>Código</th><th>Nome</th><th>Categoria</th><th>Qtd</th><th>Preço sug.</th><th></th></tr>
                 </thead>
                 <tbody id="catalogBody"></tbody>
               </table>
             </div>
           </div>
         </section>
+
+        <section class="panel" id="panel-store">
+          <div class="card">
+            <div class="card-head"><h2 id="labelStore">Dados da loja</h2></div>
+            <p class="muted" id="storeHelp"></p>
+            <form id="storeForm" class="form-stack">
+              <div class="field-row">
+                <div class="field"><label for="stTrade">Nome fantasia</label><input id="stTrade" class="control" /></div>
+                <div class="field"><label for="stLegal">Razão social</label><input id="stLegal" class="control" /></div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label for="stCnpj">CNPJ</label><input id="stCnpj" class="control" /></div>
+                <div class="field"><label for="stIe">IE</label><input id="stIe" class="control" /></div>
+              </div>
+              <div class="field"><label for="stPhone">Telefone</label><input id="stPhone" class="control" /></div>
+              <div class="field"><label for="stAddress">Endereço</label><input id="stAddress" class="control" /></div>
+              <div class="field-row">
+                <div class="field"><label for="stCity">Cidade</label><input id="stCity" class="control" /></div>
+                <div class="field"><label for="stState">UF</label><input id="stState" class="control" maxlength="2" /></div>
+                <div class="field"><label for="stZip">CEP</label><input id="stZip" class="control" /></div>
+              </div>
+              <div class="field"><label for="stMsg">Mensagem do cupom</label><input id="stMsg" class="control" /></div>
+              <div class="field">
+                <label for="stFiscal">Modo fiscal</label>
+                <select id="stFiscal" class="control">
+                  <option value="nao_fiscal">Cupom não fiscal</option>
+                  <option value="nfce_futuro">NFC-e (scaffold / futuro)</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <div class="field"><label for="stCscId">CSC ID (futuro)</label><input id="stCscId" class="control" /></div>
+                <div class="field"><label for="stCscToken">CSC token (futuro)</label><input id="stCscToken" class="control" /></div>
+              </div>
+              <button type="submit" class="btn" id="btnSaveStore">Salvar</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel" id="panel-team">
+          <div class="card">
+            <div class="card-head">
+              <h2 id="labelTeam">Equipe</h2>
+              <button type="button" class="btn" id="btnNewMember">Adicionar membro</button>
+            </div>
+            <p class="muted" id="teamHelp"></p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>E-mail</th><th>Papel</th><th></th></tr></thead>
+                <tbody id="teamBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </main>
 
-      <p class="footer-note">
-        <span id="footerStorageText">Dados na sua conta Supabase</span>
-      </p>
+      <p class="footer-note"><span id="footerStorageText">Dados na sua conta Supabase</span></p>
     </div>
 
     <div class="dialog-backdrop" id="dialogBackdrop" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
@@ -301,9 +427,19 @@
     <script src="./assets/js/supabase-client.js"></script>
     <script src="./assets/js/i18n.js"></script>
     <script src="./assets/js/db.js"></script>
+    <script src="./assets/js/offline.js"></script>
     <script src="./assets/js/scale-protocols.js"></script>
     <script src="./assets/js/scale.js"></script>
     <script src="./assets/js/catalog.js"></script>
+    <script src="./assets/js/printers-catalog.js"></script>
+    <script src="./assets/js/printers-escpos.js"></script>
+    <script src="./assets/js/printers.js"></script>
+    <script src="./assets/js/receipt.js"></script>
     <script src="./assets/js/app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      }
+    </script>
   </body>
 </html>

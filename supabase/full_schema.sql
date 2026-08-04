@@ -1,6 +1,6 @@
 -- elERP · schema completo (rode no SQL Editor)
 -- Projeto: jdkggegrreixywoyhkmb
--- Depois rode também: catalog_bebidas_br.sql
+-- Depois rode: extend_complete.sql e catalog_bebidas_br.sql
 
 create extension if not exists pgcrypto;
 
@@ -317,6 +317,10 @@ do $$
 declare
   cname text;
 begin
+  if to_regclass('public.store_products') is null then
+    raise notice 'store_products ausente — pulando alteração de unidade';
+    return;
+  end if;
   select c.conname into cname
   from pg_constraint c
   where c.conrelid = 'public.store_products'::regclass

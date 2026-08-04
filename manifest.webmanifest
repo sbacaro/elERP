@@ -1,0 +1,11 @@
+{
+  "name": "elERP",
+  "short_name": "elERP",
+  "description": "PDV açaí e sorvete por grama",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3fafb",
+  "theme_color": "#0a5554",
+  "lang": "pt-BR",
+  "icons": []
+}
