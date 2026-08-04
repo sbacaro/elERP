@@ -22,11 +22,6 @@ const PANEL_AREA = {
   "panel-team": "mgmt",
 };
 
-const AREA_DEFAULT_PANEL = {
-  ops: "panel-pos",
-  mgmt: "panel-products",
-};
-
 const PAY_METHODS = ["dinheiro", "pix", "cartao"];
 
 let payLines = [{ method: "dinheiro", amount: "" }];
@@ -35,9 +30,8 @@ const ui = {
   toastEl: document.getElementById("toast"),
   sessionPill: document.getElementById("sessionPill"),
   panels: [...document.querySelectorAll(".panel")],
-  navButtons: [...document.querySelectorAll(".nav-group button[data-panel]")],
-  areaButtons: [...document.querySelectorAll(".area-switch button[data-area]")],
-  currentArea: "ops",
+  navButtons: [...document.querySelectorAll(".nav button[data-panel]")],
+  currentPanel: "panel-pos",
 };
 
 function toast(message, isError = false) {
@@ -86,8 +80,11 @@ function applyRoleVisibility() {
   document.body.classList.toggle("role-manager", role === "manager");
   document.querySelectorAll(".mgmt-only").forEach((el) => setHidden(el, isCashier));
   document.querySelectorAll(".owner-only").forEach((el) => setHidden(el, !isOwner));
-  if (isCashier && ui.currentArea === "mgmt") {
-    setArea("ops");
+  const active = document.querySelector(".panel.active")?.id || "panel-pos";
+  if (isCashier && PANEL_AREA[active] === "mgmt") {
+    switchPanel("panel-pos");
+  } else if (!isOwner && (active === "panel-store" || active === "panel-team")) {
+    switchPanel("panel-products");
   }
 }
 
@@ -113,15 +110,23 @@ function applyStaticLabels() {
     "panel-day": t.nav.day,
     "panel-scale": t.nav.scale,
     "panel-printers": t.nav.printers,
-    "panel-catalog": t.nav.catalog,
+    "panel-catalog": t.nav.catalogItems,
     "panel-store": t.nav.store,
     "panel-team": t.nav.team,
   };
   ui.navButtons.forEach((btn) => {
     btn.textContent = navMap[btn.dataset.panel] || btn.textContent;
   });
-  ui.areaButtons.forEach((btn) => {
-    btn.textContent = btn.dataset.area === "mgmt" ? t.nav.mgmt : t.nav.ops;
+  const sectionLabels = {
+    navLabelOps: t.nav.ops,
+    navLabelCatalog: t.nav.catalog,
+    navLabelStock: t.nav.stock,
+    navLabelDevices: t.nav.devices,
+    navLabelAccount: t.nav.account,
+  };
+  Object.entries(sectionLabels).forEach(([id, label]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = label;
   });
 
   setText("#labelFlavors", t.flavorsAndItems);
@@ -240,38 +245,22 @@ function applyStaticLabels() {
   fillCatalogGroups();
 }
 
-function setArea(area, { keepPanel = false } = {}) {
-  const next = area === "mgmt" ? "mgmt" : "ops";
-  if (next === "mgmt" && db.state?.role === "cashier") {
-    toast(t.errors.forbidden, true);
-    return;
-  }
-  ui.currentArea = next;
-  document.body.dataset.area = next;
-  ui.areaButtons.forEach((btn) => {
-    btn.setAttribute("aria-current", btn.dataset.area === next ? "page" : "false");
-  });
-  setHidden(document.getElementById("navOps"), next !== "ops");
-  setHidden(document.getElementById("navMgmt"), next !== "mgmt");
-  const activeId = document.querySelector(".panel.active")?.id;
-  if (keepPanel && activeId && PANEL_AREA[activeId] === next) {
-    switchPanel(activeId);
-    return;
-  }
-  switchPanel(AREA_DEFAULT_PANEL[next]);
+function canOpenPanel(id) {
+  const role = db.state?.role || "owner";
+  const area = PANEL_AREA[id] || "ops";
+  if (role === "cashier" && area === "mgmt") return false;
+  if (role !== "owner" && (id === "panel-store" || id === "panel-team")) return false;
+  return true;
 }
 
 function switchPanel(id) {
-  const area = PANEL_AREA[id] || "ops";
-  if (ui.currentArea !== area) {
-    ui.currentArea = area;
-    document.body.dataset.area = area;
-    ui.areaButtons.forEach((btn) => {
-      btn.setAttribute("aria-current", btn.dataset.area === area ? "page" : "false");
-    });
-    setHidden(document.getElementById("navOps"), area !== "ops");
-    setHidden(document.getElementById("navMgmt"), area !== "mgmt");
+  if (!id || !document.getElementById(id)) id = "panel-pos";
+  if (!canOpenPanel(id)) {
+    toast(t.errors?.forbidden || "Acesso restrito.", true);
+    id = "panel-pos";
   }
+  ui.currentPanel = id;
+  document.body.dataset.panel = id;
   ui.panels.forEach((p) => p.classList.toggle("active", p.id === id));
   ui.navButtons.forEach((b) => {
     b.setAttribute("aria-current", b.dataset.panel === id ? "page" : "false");
@@ -1746,7 +1735,7 @@ async function flushOfflineQueue() {
   if (synced > 0) {
     toast(t.offlineSynced);
     refreshSessionPill();
-    const active = document.querySelector(".panel.active")?.id || "panel-pos";
+    const active = ui.currentPanel || document.querySelector(".panel.active")?.id || "panel-pos";
     switchPanel(active);
   }
   updateOfflineBanner();
@@ -1921,9 +1910,6 @@ function readPrinterFormConfig() {
 }
 
 function bindEvents() {
-  ui.areaButtons.forEach((btn) => {
-    btn.addEventListener("click", () => setArea(btn.dataset.area));
-  });
   ui.navButtons.forEach((btn) => {
     btn.addEventListener("click", () => switchPanel(btn.dataset.panel));
   });
@@ -2208,7 +2194,7 @@ async function bootAuth() {
     applyRoleVisibility();
     refreshSessionPill();
     updateOfflineBanner();
-    const active = document.querySelector(".panel.active")?.id || "panel-pos";
+    const active = ui.currentPanel || document.querySelector(".panel.active")?.id || "panel-pos";
     switchPanel(active);
   };
 
@@ -2247,7 +2233,6 @@ async function enterApp(user) {
     ensureCatalog();
     await flushOfflineQueue();
     updateOfflineBanner();
-    setArea("ops");
     switchPanel("panel-pos");
   } catch (error) {
     setAppVisible(false);

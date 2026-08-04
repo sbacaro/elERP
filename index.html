@@ -55,7 +55,7 @@
           <div class="session-pill" id="sessionPill" data-open="false">
             <span class="dot"></span> Caixa fechado
           </div>
-          <span class="ops-only topbar-cash">
+          <span class="topbar-cash">
             <button type="button" class="btn btn-secondary btn-sm" id="btnOpenCash">Abrir caixa</button>
             <button type="button" class="btn btn-danger btn-sm" id="btnCloseCash">Fechar caixa</button>
           </span>
@@ -63,28 +63,43 @@
         </div>
       </header>
 
-      <div class="nav-shell">
-        <nav class="area-switch" aria-label="Áreas do app">
-          <button type="button" data-area="ops" aria-current="page" id="areaOpsBtn">Operação</button>
-          <button type="button" data-area="mgmt" id="areaMgmtBtn" class="mgmt-only">Gestão</button>
-        </nav>
-
-        <nav class="nav nav-group" id="navOps" data-area="ops" aria-label="Operação">
-          <button type="button" data-panel="panel-pos" aria-current="page">Caixa</button>
-          <button type="button" data-panel="panel-day">Dia / Relatórios</button>
-        </nav>
-
-        <nav class="nav nav-group is-hidden mgmt-only" id="navMgmt" data-area="mgmt" aria-label="Gestão" hidden>
-          <button type="button" data-panel="panel-products">Produtos</button>
-          <button type="button" data-panel="panel-inventory">Inventário</button>
-          <button type="button" data-panel="panel-purchases">Compras</button>
-          <button type="button" data-panel="panel-suppliers">Fornecedores</button>
-          <button type="button" data-panel="panel-catalog">Catálogo</button>
-          <button type="button" data-panel="panel-scale">Balança</button>
-          <button type="button" data-panel="panel-printers">Impressoras</button>
-          <button type="button" data-panel="panel-store" class="owner-only">Loja</button>
-          <button type="button" data-panel="panel-team" class="owner-only">Equipe</button>
-        </nav>
+      <div class="nav-shell" aria-label="Menu principal">
+        <div class="nav-section" id="navSectionOps">
+          <span class="nav-section-label" id="navLabelOps">Operação</span>
+          <nav class="nav" id="navOps" aria-label="Operação">
+            <button type="button" data-panel="panel-pos" aria-current="page">Caixa</button>
+            <button type="button" data-panel="panel-day">Dia</button>
+          </nav>
+        </div>
+        <div class="nav-section mgmt-only" id="navSectionCatalog">
+          <span class="nav-section-label" id="navLabelCatalog">Cadastros</span>
+          <nav class="nav" aria-label="Cadastros">
+            <button type="button" data-panel="panel-products">Produtos</button>
+            <button type="button" data-panel="panel-suppliers">Fornecedores</button>
+            <button type="button" data-panel="panel-catalog">Catálogo</button>
+          </nav>
+        </div>
+        <div class="nav-section mgmt-only" id="navSectionStock">
+          <span class="nav-section-label" id="navLabelStock">Estoque</span>
+          <nav class="nav" aria-label="Estoque">
+            <button type="button" data-panel="panel-inventory">Inventário</button>
+            <button type="button" data-panel="panel-purchases">Compras</button>
+          </nav>
+        </div>
+        <div class="nav-section mgmt-only" id="navSectionDevices">
+          <span class="nav-section-label" id="navLabelDevices">Equipamentos</span>
+          <nav class="nav" aria-label="Equipamentos">
+            <button type="button" data-panel="panel-scale">Balança</button>
+            <button type="button" data-panel="panel-printers">Impressoras</button>
+          </nav>
+        </div>
+        <div class="nav-section owner-only" id="navSectionAccount">
+          <span class="nav-section-label" id="navLabelAccount">Conta</span>
+          <nav class="nav" aria-label="Conta">
+            <button type="button" data-panel="panel-store">Loja</button>
+            <button type="button" data-panel="panel-team">Equipe</button>
+          </nav>
+        </div>
       </div>
 
       <main>
